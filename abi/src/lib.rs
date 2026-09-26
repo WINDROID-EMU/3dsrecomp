@@ -5,6 +5,7 @@
 use std::ffi::{c_char, c_void, CStr};
 #[cfg(feature = "load")]
 use std::path::Path;
+use std::path::PathBuf;
 
 /// recomp.h, which the generated code includes.
 pub const HEADER: &str = include_str!("../recomp.h");
@@ -19,6 +20,31 @@ pub const EXIT_BUDGET: u32 = 2;
 pub const EXIT_UNWIND: u32 = 3;
 
 pub type Code = unsafe extern "C" fn(*mut Context);
+
+/// where 3dsrecomp build installs libraries for hosts to find, one per
+/// title, in the system's place for a program's data.
+pub fn library_dir() -> Option<PathBuf> {
+    let var = |name: &str| std::env::var_os(name).filter(|value| !value.is_empty()).map(PathBuf::from);
+    let dir = if cfg!(windows) {
+        var("APPDATA")
+    } else if cfg!(target_os = "macos") {
+        var("HOME").map(|home| home.join("Library/Application Support"))
+    } else {
+        var("XDG_DATA_HOME").or_else(|| var("HOME").map(|home| home.join(".local/share")))
+    };
+    dir.map(|dir| dir.join("3dsrecomp"))
+}
+
+/// the file a title's library goes by, named after its title id.
+pub fn library_name(program_id: u64) -> String {
+    format!("{program_id:016X}.so")
+}
+
+/// the library installed for a title, if there is one.
+pub fn installed(program_id: u64) -> Option<PathBuf> {
+    let path = library_dir()?.join(library_name(program_id));
+    path.is_file().then_some(path)
+}
 
 #[repr(C)]
 pub struct Host {

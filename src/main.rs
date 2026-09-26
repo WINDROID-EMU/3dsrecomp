@@ -13,15 +13,18 @@ use std::process::exit;
 use recomp3ds::discover::{self, Analysis, Byte, Mode, Program, Source};
 use recomp3ds::overrides::Override;
 use recomp3ds::rom::Title;
-use recomp3ds::{codegen, compile, overrides, port};
+use recomp3ds::{abi, codegen, compile, overrides, port};
 #[cfg(feature = "verify")]
-use recomp3ds::{abi, image, imported, module_files, static_module, verify};
+use recomp3ds::{image, imported, module_files, static_module, verify};
 
 const USAGE: &str = "\
 usage, 3dsrecomp analyze <rom>
-       3dsrecomp build <rom> <dir> [--overrides <file or dir>]
+       3dsrecomp build <rom> [<dir>] [--overrides <file or dir>]
        3dsrecomp port <rom> <dir> [--overrides <file or dir>] [--name <name>] [--zakuro <checkout>]
-       3dsrecomp verify <rom> <library> [count]";
+       3dsrecomp verify <rom> <library> [count]
+
+build without a dir works in the cache and installs the library where
+Zakuro finds it on its own.";
 
 /// what the options on the command line ask for.
 #[derive(Default)]
@@ -58,7 +61,8 @@ fn main() {
     }
     match words.iter().map(String::as_str).collect::<Vec<_>>()[..] {
         ["analyze", rom] => analyze(rom),
-        ["build", rom, dir] => build(rom, Path::new(dir), &options),
+        ["build", rom] => build(rom, None, &options),
+        ["build", rom, dir] => build(rom, Some(Path::new(dir)), &options),
         ["port", rom, dir] => port(rom, Path::new(dir), &options),
         #[cfg(feature = "verify")]
         ["verify", rom, library] => check(rom, Path::new(library), 500),
@@ -89,10 +93,12 @@ fn load(path: &str) -> (Title, Vec<(String, Program)>) {
     (title, programs)
 }
 
-/// writes the title's code as C in dir, the overrides with it, returning
-/// the title and the sources to compile.
-fn generate(path: &str, dir: &Path, options: &Options) -> (Title, Vec<String>) {
+/// writes the title's code as C in the dir it picks, the overrides with it,
+/// returning the title, the dir and the sources to compile.
+fn generate(path: &str, pick: impl FnOnce(&Title) -> PathBuf, options: &Options) -> (Title, PathBuf, Vec<String>) {
     let (title, mut programs) = load(path);
+    let dir = pick(&title);
+    let dir = dir.as_path();
     let files = match &options.overrides {
         Some(path) => overrides::load(path).unwrap_or_else(|error| {
             eprintln!("{error}");
@@ -161,24 +167,63 @@ fn generate(path: &str, dir: &Path, options: &Options) -> (Title, Vec<String>) {
     }
     let size: usize = generated.iter().map(|(_, contents)| contents.len()).sum();
     println!("wrote {} files, {} MiB of C, {} overrides", generated.len(), size >> 20, replaced.len());
-    (title, sources)
+    (title, dir.to_owned(), sources)
 }
 
-fn build(path: &str, dir: &Path, options: &Options) {
-    let (title, sources) = generate(path, dir, options);
-    let library = dir.join(format!("{:016X}.so", title.program_id()));
+/// builds the library in dir, or when there is none in the cache, and then
+/// installs it where hosts look for it.
+fn build(path: &str, given: Option<&Path>, options: &Options) {
+    let (title, dir, sources) =
+        generate(path, |title| given.map(Path::to_owned).unwrap_or_else(|| cache_dir(title.program_id())), options);
+    let library = dir.join(abi::library_name(title.program_id()));
     let start = std::time::Instant::now();
-    if let Err(error) = compile::compile(dir, &sources, &library) {
+    if let Err(error) = compile::compile(&dir, &sources, &library) {
         eprintln!("{error}");
         exit(1);
     }
     println!("built {} in {:.1?}", library.display(), start.elapsed());
+    if given.is_none() {
+        install(&library, title.program_id());
+    }
+}
+
+/// where build works on a title whose library it installs.
+fn cache_dir(program_id: u64) -> PathBuf {
+    let var = |name: &str| std::env::var_os(name).filter(|value| !value.is_empty()).map(PathBuf::from);
+    let base = if cfg!(windows) {
+        var("LOCALAPPDATA")
+    } else if cfg!(target_os = "macos") {
+        var("HOME").map(|home| home.join("Library/Caches"))
+    } else {
+        var("XDG_CACHE_HOME").or_else(|| var("HOME").map(|home| home.join(".cache")))
+    };
+    base.unwrap_or_else(std::env::temp_dir).join("3dsrecomp").join(format!("{program_id:016X}"))
+}
+
+/// copies the library to where hosts look for it, under another name first
+/// so that a host running the old one keeps it.
+fn install(library: &Path, program_id: u64) {
+    let Some(dir) = abi::library_dir() else {
+        eprintln!("there is no place to install the library, it stays at {}", library.display());
+        exit(1);
+    };
+    let target = dir.join(abi::library_name(program_id));
+    let partial = target.with_extension("so.new");
+    let installed = std::fs::create_dir_all(&dir)
+        .and_then(|()| std::fs::copy(library, &partial))
+        .and_then(|_| std::fs::rename(&partial, &target));
+    match installed {
+        Ok(()) => println!("installed {}, which Zakuro runs for the game from now on", target.display()),
+        Err(error) => {
+            eprintln!("could not install {}, {error}", target.display());
+            exit(1);
+        }
+    }
 }
 
 /// a Cargo project at dir that builds the title into a program of its own.
 fn port(path: &str, dir: &Path, options: &Options) {
-    let code = dir.join("code");
-    let (title, sources) = generate(path, &code, options);
+    let (title, code, sources) = generate(path, |_| dir.join("code"), options);
     let start = std::time::Instant::now();
     let archived = compile::objects(&code, &sources).and_then(|objects| compile::archive(&objects, &code.join("librecomp.a")));
     if let Err(error) = archived {

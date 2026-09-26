@@ -23,6 +23,13 @@ compile the sources yourself, keep `-ffp-contract=off`. Without it, the
 compiler can fuse a multiply and an add, which rounds differently from the
 guest.
 
+Without a directory, `3dsrecomp build <rom>` works in the cache
+(`~/.cache/3dsrecomp/<title id>`) and then installs the library at
+`~/.local/share/3dsrecomp/<title id>.so`, or the system's equivalent. A
+host that looks there finds the code for a title without being told where
+it is. In Rust, `recomp_abi::installed(title_id)` does the looking, and
+Zakuro does it on its own.
+
 ## Exported symbols
 
 | Symbol | Type | Meaning |
