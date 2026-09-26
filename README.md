@@ -12,7 +12,7 @@ So far it has been tested with Pokémon Alpha Sapphire, which runs through its i
 - generating C for ARM, Thumb and VFP code, with the less common instructions going through the interpreter
 - modules get code that works wherever the game loads them
 - checking every recompiled function against Zakuro's interpreter, running both from the same state and comparing registers, flags and memory
-- running it in Zakuro with --recompiled
+- running it in Zakuro, which finds the library build installs on its own
 - replacing any function with one written by hand in C, for fixes, mods or faster versions, see [docs/overrides.md](docs/overrides.md)
 - making a game into a program of its own, with the code linked into Zakuro instead of loaded by it, see [docs/port.md](docs/port.md)
 
@@ -23,23 +23,23 @@ You need Rust and a C compiler. I've only tested on Linux so far.
 ```
 cargo build --release
 ./target/release/3dsrecomp analyze game.3ds
-./target/release/3dsrecomp build game.3ds out
+./target/release/3dsrecomp build game.3ds
 ```
 
 analyze - shows how much of the code was found; 
-build - writes the C to out and compiles it. 
+build - writes the C, compiles it and installs the library where Zakuro finds it. Give it a folder (build game.3ds out) to keep everything there instead. 
 
 verify runs the recompiled functions against Zakuro's interpreter, which cargo fetches when it's built with the verify feature:
 
 ```
 cargo build --release --features verify
-./target/release/3dsrecomp verify game.3ds out/<title id>.so
+./target/release/3dsrecomp verify game.3ds ~/.local/share/3dsrecomp/<title id>.so
 ```
 
-The build takes a while, so don't worry. Then point Zakuro at the library, or at the directory holding it:
+The build takes a while, so don't worry. After that, Zakuro runs the game on the recompiled code on its own:
 
 ```
-zakuro game.3ds --recompiled out
+zakuro game.3ds
 ```
 
 Or make the game a program of its own, which still needs the game to run:
