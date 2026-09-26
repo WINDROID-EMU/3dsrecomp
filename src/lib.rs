@@ -2,8 +2,10 @@
 //! recompile it themselves.
 //!
 //! rom reads the title, discover finds its functions, codegen writes them as
-//! C against recomp.h and compile builds that into a shared library. abi,
-//! with the host feature, loads such a library from Rust.
+//! C against recomp.h, with any overrides in place of the functions they
+//! replace, and compile builds that into a shared or a static library. port
+//! makes a program of a title out of the static one, and abi, with the host
+//! feature, loads the shared one from Rust.
 //!
 //! ```no_run
 //! let title = recomp3ds::rom::Title::load("game.3ds")?;
@@ -22,6 +24,8 @@ pub mod compile;
 pub mod cro;
 pub mod discover;
 pub mod image;
+pub mod overrides;
+pub mod port;
 pub mod rom;
 mod thumb;
 #[cfg(feature = "verify")]

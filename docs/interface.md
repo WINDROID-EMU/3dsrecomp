@@ -291,6 +291,13 @@ int run(Context *ctx, int32_t budget) {
 A working host also fills in the page tables, `vfp`, `fpscr`, `tls` and
 `host`, and implements the memory callbacks and `interpret`.
 
+## Overrides and programs
+
+Functions written by hand can take the place of generated ones, see
+[overrides](overrides.md). The same tables can also be linked straight
+into a program instead of loaded from a library, see
+[a program of its own](port.md).
+
 ## Reference hosts
 
 - [`src/abi.rs`](../src/abi.rs) is the interface in Rust. It loads the

@@ -1,6 +1,7 @@
-//! compiling the generated C into a shared library, one compiler per core.
+//! compiling the generated C, one compiler per core, into a shared library
+//! a host loads or a static one a program links in.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -11,6 +12,11 @@ const FLAGS: &[&str] = &["-O2", "-fPIC", "-fvisibility=hidden", "-ffp-contract=o
 
 /// compiles sources, file names inside dir, and links them into library.
 pub fn compile(dir: &Path, sources: &[String], library: &Path) -> Result<(), String> {
+    shared(&objects(dir, sources)?, library)
+}
+
+/// compiles sources, file names inside dir, each into an object beside it.
+pub fn objects(dir: &Path, sources: &[String]) -> Result<Vec<PathBuf>, String> {
     let compiler = std::env::var("CC").unwrap_or_else(|_| "cc".to_owned());
     let jobs = std::thread::available_parallelism().map_or(4, |n| n.get());
     let next = AtomicUsize::new(0);
@@ -22,6 +28,8 @@ pub fn compile(dir: &Path, sources: &[String], library: &Path) -> Result<(), Str
                     let path = dir.join(source);
                     let status = Command::new(&compiler)
                         .args(FLAGS)
+                        .arg("-I")
+                        .arg(dir)
                         .arg("-c")
                         .arg(&path)
                         .arg("-o")
@@ -38,11 +46,29 @@ pub fn compile(dir: &Path, sources: &[String], library: &Path) -> Result<(), Str
     if !failures.is_empty() {
         return Err(format!("{} failed to compile, {}", failures.len(), failures.join(" ")));
     }
+    Ok(sources.iter().map(|source| dir.join(source).with_extension("o")).collect())
+}
 
-    let objects = sources.iter().map(|source| dir.join(source).with_extension("o"));
+/// links objects into a shared library.
+pub fn shared(objects: &[PathBuf], library: &Path) -> Result<(), String> {
+    let compiler = std::env::var("CC").unwrap_or_else(|_| "cc".to_owned());
     let status = Command::new(&compiler).arg("-shared").arg("-o").arg(library).args(objects).status();
     match status {
         Ok(status) if status.success() => Ok(()),
         _ => Err("linking failed".to_owned()),
+    }
+}
+
+/// puts objects into a static library.
+pub fn archive(objects: &[PathBuf], library: &Path) -> Result<(), String> {
+    // ar adds to what is there, which could hold objects no longer built
+    if library.exists() {
+        std::fs::remove_file(library).map_err(|e| format!("could not replace {}, {e}", library.display()))?;
+    }
+    let ar = std::env::var("AR").unwrap_or_else(|_| "ar".to_owned());
+    let status = Command::new(&ar).arg("rcs").arg(library).args(objects).status();
+    match status {
+        Ok(status) if status.success() => Ok(()),
+        _ => Err("archiving failed".to_owned()),
     }
 }

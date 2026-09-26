@@ -24,6 +24,9 @@ pub enum Source {
     /// the start of a gap nothing led to, or a push in one, which is how
     /// functions reached only through tables nobody can see begin.
     Scan,
+    /// an address a function written by hand replaces, which its author
+    /// says is code.
+    Override,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

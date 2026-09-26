@@ -3,23 +3,63 @@
 //!
 //! analyze reports how much of a title's code a generic pass can discover
 //! on its own, build turns what it found into C and compiles it into a
-//! library the emulator can load, and verify, built with the verify
-//! feature, checks that library against Zakuro's interpreter.
+//! library the emulator can load, port makes a program of the title with
+//! that code linked in, and verify, built with the verify feature, checks
+//! the library against Zakuro's interpreter.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::exit;
 
 use recomp3ds::discover::{self, Analysis, Byte, Mode, Program, Source};
+use recomp3ds::overrides::Override;
 use recomp3ds::rom::Title;
-use recomp3ds::{codegen, compile};
+use recomp3ds::{codegen, compile, overrides, port};
 #[cfg(feature = "verify")]
 use recomp3ds::{abi, image, imported, module_files, static_module, verify};
 
+const USAGE: &str = "\
+usage, 3dsrecomp analyze <rom>
+       3dsrecomp build <rom> <dir> [--overrides <file or dir>]
+       3dsrecomp port <rom> <dir> [--overrides <file or dir>] [--name <name>] [--zakuro <checkout>]
+       3dsrecomp verify <rom> <library> [count]";
+
+/// what the options on the command line ask for.
+#[derive(Default)]
+struct Options {
+    /// C files of functions written by hand, see docs/overrides.md.
+    overrides: Option<PathBuf>,
+    /// what port calls the program.
+    name: Option<String>,
+    /// a Zakuro checkout for port to build against.
+    zakuro: Option<PathBuf>,
+}
+
 fn main() {
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    match args.iter().map(String::as_str).collect::<Vec<_>>()[..] {
+    let mut words = Vec::new();
+    let mut options = Options::default();
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
+        let mut value = || {
+            args.next().unwrap_or_else(|| {
+                eprintln!("{arg} needs a value");
+                exit(2);
+            })
+        };
+        match arg.as_str() {
+            "--overrides" => options.overrides = Some(value().into()),
+            "--name" => options.name = Some(value()),
+            "--zakuro" => options.zakuro = Some(value().into()),
+            other if other.starts_with("--") => {
+                eprintln!("unknown option {other}\n{USAGE}");
+                exit(2);
+            }
+            _ => words.push(arg),
+        }
+    }
+    match words.iter().map(String::as_str).collect::<Vec<_>>()[..] {
         ["analyze", rom] => analyze(rom),
-        ["build", rom, dir] => build(rom, Path::new(dir)),
+        ["build", rom, dir] => build(rom, Path::new(dir), &options),
+        ["port", rom, dir] => port(rom, Path::new(dir), &options),
         #[cfg(feature = "verify")]
         ["verify", rom, library] => check(rom, Path::new(library), 500),
         #[cfg(feature = "verify")]
@@ -30,7 +70,7 @@ fn main() {
             exit(2);
         }
         _ => {
-            eprintln!("usage, 3dsrecomp analyze <rom>, build <rom> <dir> or verify <rom> <library> [count]");
+            eprintln!("{USAGE}");
             exit(2);
         }
     }
@@ -49,9 +89,40 @@ fn load(path: &str) -> (Title, Vec<(String, Program)>) {
     (title, programs)
 }
 
-fn build(path: &str, dir: &Path) {
-    let (title, programs) = load(path);
+/// writes the title's code as C in dir, the overrides with it, returning
+/// the title and the sources to compile.
+fn generate(path: &str, dir: &Path, options: &Options) -> (Title, Vec<String>) {
+    let (title, mut programs) = load(path);
+    let files = match &options.overrides {
+        Some(path) => overrides::load(path).unwrap_or_else(|error| {
+            eprintln!("{error}");
+            exit(1);
+        }),
+        None => Vec::new(),
+    };
+    let replaced: Vec<Override> = files.iter().flat_map(|file| file.overrides.iter().cloned()).collect();
+    // whatever an override replaces has to be generated too, for it to call
+    for item in &replaced {
+        let name = item.module.as_deref().unwrap_or("executable");
+        let Some((_, program)) = programs.iter_mut().find(|(program, _)| program == name) else {
+            eprintln!("the title has no module called {name}");
+            exit(1);
+        };
+        program.seeds.insert(0, (item.address, Source::Override));
+    }
+
     let analyses: Vec<Analysis> = programs.iter().map(|(_, program)| discover::analyze(program)).collect();
+    for item in &replaced {
+        let index = programs.iter().position(|(name, _)| Some(name.as_str()) == item.module.as_deref()).unwrap_or(0);
+        let thumb = item.address & 1 != 0;
+        let found = analyses[index]
+            .functions
+            .values()
+            .any(|f| (f.mode == Mode::Thumb) == thumb && f.labels.contains(&(item.address & !1)));
+        if !found {
+            println!("no code at 0x{:08X} for {} to replace, so it cannot call the original", item.address, item.name);
+        }
+    }
     let units: Vec<codegen::Unit> = programs
         .iter()
         .zip(&analyses)
@@ -62,22 +133,39 @@ fn build(path: &str, dir: &Path) {
             analysis,
         })
         .collect();
-    let files = codegen::generate(&units);
+    let generated = codegen::generate(&units, &replaced);
 
-    if let Err(error) = std::fs::create_dir_all(dir) {
-        eprintln!("could not create {}, {error}", dir.display());
+    let fail = |what: &Path, error: std::io::Error| -> ! {
+        eprintln!("could not write {}, {error}", what.display());
         exit(1);
+    };
+    let made = if files.is_empty() { std::fs::create_dir_all(dir) } else { std::fs::create_dir_all(dir.join("hand")) };
+    if let Err(error) = made {
+        fail(dir, error);
     }
-    for (name, contents) in &files {
-        if let Err(error) = std::fs::write(dir.join(name), contents) {
-            eprintln!("could not write {name}, {error}");
-            exit(1);
+    for (name, contents) in &generated {
+        let path = dir.join(name);
+        if let Err(error) = std::fs::write(&path, contents) {
+            fail(&path, error);
         }
     }
-    let size: usize = files.iter().map(|(_, contents)| contents.len()).sum();
-    println!("wrote {} files, {} MiB of C", files.len(), size >> 20);
+    let mut sources: Vec<String> =
+        generated.iter().map(|(name, _)| name.clone()).filter(|name| name.ends_with(".c")).collect();
+    for file in &files {
+        let name = format!("hand/{}", file.path.file_name().unwrap_or_default().to_string_lossy());
+        let path = dir.join(&name);
+        if let Err(error) = std::fs::write(&path, &file.source) {
+            fail(&path, error);
+        }
+        sources.push(name);
+    }
+    let size: usize = generated.iter().map(|(_, contents)| contents.len()).sum();
+    println!("wrote {} files, {} MiB of C, {} overrides", generated.len(), size >> 20, replaced.len());
+    (title, sources)
+}
 
-    let sources: Vec<String> = files.iter().map(|(name, _)| name.clone()).filter(|name| name.ends_with(".c")).collect();
+fn build(path: &str, dir: &Path, options: &Options) {
+    let (title, sources) = generate(path, dir, options);
     let library = dir.join(format!("{:016X}.so", title.program_id()));
     let start = std::time::Instant::now();
     if let Err(error) = compile::compile(dir, &sources, &library) {
@@ -85,6 +173,28 @@ fn build(path: &str, dir: &Path) {
         exit(1);
     }
     println!("built {} in {:.1?}", library.display(), start.elapsed());
+}
+
+/// a Cargo project at dir that builds the title into a program of its own.
+fn port(path: &str, dir: &Path, options: &Options) {
+    let code = dir.join("code");
+    let (title, sources) = generate(path, &code, options);
+    let start = std::time::Instant::now();
+    let archived = compile::objects(&code, &sources).and_then(|objects| compile::archive(&objects, &code.join("librecomp.a")));
+    if let Err(error) = archived {
+        eprintln!("{error}");
+        exit(1);
+    }
+    println!("built {} in {:.1?}", code.join("librecomp.a").display(), start.elapsed());
+
+    let name = options.name.clone().unwrap_or_else(|| port::package_name(&title.exheader.title));
+    let written = port::write_project(dir, &name, &title.exheader.title, title.program_id(), options.zakuro.as_deref());
+    if let Err(error) = written {
+        eprintln!("{error}");
+        exit(1);
+    }
+    println!("wrote the project for {name}, build it with cargo build --release in {}", dir.display());
+    println!("then run target/release/{name} with the path to the game");
 }
 
 /// runs up to count of the recompiled functions of each program against

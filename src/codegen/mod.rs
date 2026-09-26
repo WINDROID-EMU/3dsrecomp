@@ -13,6 +13,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 
 use crate::discover::{Analysis, Function, Mode, Program};
+use crate::overrides::Override;
 
 pub const HEADER: &str = include_str!("recomp.h");
 
@@ -147,8 +148,9 @@ pub struct Unit<'a> {
 }
 
 /// the C sources for the units, the executable first, as file names and
-/// contents.
-pub fn generate(units: &[Unit]) -> Vec<(String, String)> {
+/// contents. the overrides take the place of the functions they replace,
+/// which overrides.h lets them still call.
+pub fn generate(units: &[Unit], overrides: &[Override]) -> Vec<(String, String)> {
     let mut files = vec![("recomp.h".to_owned(), HEADER.to_owned())];
     let mut sources: Vec<String> = Vec::new();
     let mut source = String::new();
@@ -157,6 +159,8 @@ pub fn generate(units: &[Unit]) -> Vec<(String, String)> {
     let mut size = 0;
     let mut tables = String::from("#include \"recomp.h\"\n");
     let mut modules = String::new();
+    let mut originals = String::new();
+    let mut original_headers = BTreeSet::new();
 
     for (index, unit) in units.iter().enumerate() {
         let prefix = if unit.module.is_some() { format!("m{index:03}_") } else { String::new() };
@@ -164,7 +168,7 @@ pub fn generate(units: &[Unit]) -> Vec<(String, String)> {
         let mut functions: BTreeMap<u32, &Function> =
             unit.analysis.functions.iter().filter(|&(&entry, f)| recompiles(entry, f)).map(|(&e, f)| (e, f)).collect();
         let containers = containers(&functions);
-        let names: BTreeMap<u32, String> = functions
+        let mut names: BTreeMap<u32, String> = functions
             .iter()
             .map(|(&entry, f)| {
                 let home = containers.get(&entry).copied().unwrap_or(entry);
@@ -173,9 +177,28 @@ pub fn generate(units: &[Unit]) -> Vec<(String, String)> {
             .collect();
         functions.retain(|entry, _| !containers.contains_key(entry));
 
+        // calls go to the functions written by hand, which reach the
+        // generated ones through a function that enters them where they
+        // replace them
+        let replaced: Vec<&Override> = overrides.iter().filter(|o| o.module.as_deref() == unit.module).collect();
+        for &item in &replaced {
+            let Some(original) = names.insert(item.address, item.name.clone()) else { continue };
+            let address = item.address & !1;
+            let at = if unit.module.is_some() { format!("{prefix}base + 0x{address:X}u") } else { format!("0x{address:08X}u") };
+            emit!(originals, "static inline void {}(Context *ctx) {{", item.original);
+            emit!(originals, "    ctx->r[15] = {at};");
+            emit!(originals, "    ctx->thumb = {};", item.address & 1);
+            emit!(originals, "    {original}(ctx);");
+            emit!(originals, "}}\n");
+            original_headers.insert(header.clone());
+        }
+
         let mut prototypes = String::new();
         if unit.module.is_some() {
             emit!(prototypes, "extern uint32_t {prefix}base;");
+        }
+        for item in &replaced {
+            emit!(prototypes, "void {}(Context *ctx);", item.name);
         }
         for (&entry, function) in &functions {
             emit!(prototypes, "void {}(Context *ctx);", name(&prefix, entry, function.mode == Mode::Thumb));
@@ -213,6 +236,9 @@ pub fn generate(units: &[Unit]) -> Vec<(String, String)> {
                 }
             }
         }
+        for item in &replaced {
+            entries.insert(item.address, item.name.clone());
+        }
         tables.push_str(&include);
         let table = match unit.module {
             Some(module) => {
@@ -244,6 +270,14 @@ pub fn generate(units: &[Unit]) -> Vec<(String, String)> {
     emit!(tables, "RECOMP_EXPORT const uint32_t recomp_module_count = {};", units.len() - 1);
     emit!(tables, "RECOMP_EXPORT const Module recomp_modules[] = {{\n{modules}}};");
     files.push(("entries.c".to_owned(), tables));
+    if !overrides.is_empty() {
+        let mut header = String::from("/* what overrides include, see docs/overrides.md. */\n\n#include \"recomp.h\"\n");
+        for included in &original_headers {
+            emit!(header, "#include \"{included}\"");
+        }
+        emit!(header, "\n/* the generated functions the overrides replace. */\n\n{originals}");
+        files.push(("overrides.h".to_owned(), header));
+    }
     files.extend(sources.into_iter().enumerate().map(|(i, source)| (format!("code{i:03}.c"), source)));
     files
 }
@@ -293,4 +327,50 @@ fn write_function(out: &mut String, program: &Program, scope: &Scope, entry: u32
         }
     }
     emit!(out, "}}\n");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::discover::{self, Source};
+    use crate::image::Segment;
+
+    const BASE: u32 = 0x0010_0000;
+
+    /// the files for a function that calls another, the callee replaced.
+    fn generated(overrides: &[Override]) -> BTreeMap<String, String> {
+        // bl BASE + 8, bx lr, bx lr
+        let words = [0xEB00_0000u32, 0xE12F_FF1E, 0xE12F_FF1E];
+        let program = Program {
+            text: Segment { base: BASE, bytes: words.iter().flat_map(|w| w.to_le_bytes()).collect() },
+            seeds: vec![(BASE, Source::Entry)],
+            slots: None,
+        };
+        let analysis = discover::analyze(&program);
+        let units = [Unit { module: None, program: &program, analysis: &analysis }];
+        generate(&units, overrides).into_iter().collect()
+    }
+
+    #[test]
+    fn overrides_take_the_place_of_what_they_replace() {
+        let replaced = Override {
+            module: None,
+            address: BASE + 8,
+            name: "override_0x00100008".to_owned(),
+            original: "original_0x00100008".to_owned(),
+        };
+        let files = generated(std::slice::from_ref(&replaced));
+        let code = &files["code000.c"];
+        assert!(code.contains("CALL(override_0x00100008);"));
+        assert!(files["functions.h"].contains("void override_0x00100008(Context *ctx);"));
+        assert!(files["entries.c"].contains("{0x00100008u, override_0x00100008},"));
+        let header = &files["overrides.h"];
+        assert!(header.contains("static inline void original_0x00100008(Context *ctx) {"));
+        assert!(header.contains("f_00100008(ctx);"));
+
+        // without overrides nothing changes
+        let plain = generated(&[]);
+        assert!(plain["code000.c"].contains("CALL(f_00100008);"));
+        assert!(!plain.contains_key("overrides.h"));
+    }
 }

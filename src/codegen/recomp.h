@@ -491,4 +491,13 @@ static inline void recomp_call(Context *ctx) {
     if (UNLIKELY(ctx->exit)) return; \
 } while (0)
 
+/* a function written by hand to run instead of the one at address, odd for
+   Thumb, or at an offset in a module. see docs/overrides.md. */
+#define RECOMP_OVERRIDE(address) void override_##address(Context *ctx)
+#define RECOMP_OVERRIDE_IN(module, offset) void override_##module##_##offset(Context *ctx)
+
+/* the generated function an override replaces, to run with CALL. */
+#define RECOMP_ORIGINAL(address) original_##address
+#define RECOMP_ORIGINAL_IN(module, offset) original_##module##_##offset
+
 #endif
