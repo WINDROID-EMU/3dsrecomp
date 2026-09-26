@@ -13,6 +13,8 @@ So far it has been tested with Pokémon Alpha Sapphire, which runs through its i
 - modules get code that works wherever the game loads them
 - checking every recompiled function against Zakuro's interpreter, running both from the same state and comparing registers, flags and memory
 - running it in Zakuro with --recompiled
+- replacing any function with one written by hand in C, for fixes, mods or faster versions, see [docs/overrides.md](docs/overrides.md)
+- making a game into a program of its own, with the code linked into Zakuro instead of loaded by it, see [docs/port.md](docs/port.md)
 
 ## How to use
 
@@ -40,9 +42,19 @@ The build takes a while, so don't worry. Then point Zakuro at the library, or at
 zakuro game.3ds --recompiled out
 ```
 
+Or make the game a program of its own, which still needs the game to run:
+
+```
+./target/release/3dsrecomp port game.3ds mygame
+cd mygame && cargo build --release
+./target/release/<name> game.3ds
+```
+
+build and port both take --overrides with a C file or a folder of them, for functions written by hand.
+
 ## Notes
 
-This repository doesn't contain any game code. You need your own dump of a game you own, and since the generated C and libraries come from the game, don't share them.
+This repository doesn't contain any game code. You need your own dump of a game you own, and since the generated C, libraries and programs come from the game, don't share them.
 
 I do not condone piracy, and I will not help you with that. So, don't ask me about that.
 
