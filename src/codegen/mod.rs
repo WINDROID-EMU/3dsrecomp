@@ -15,7 +15,7 @@ use std::fmt::Write;
 use crate::discover::{Analysis, Function, Mode, Program};
 use crate::overrides::Override;
 
-pub const HEADER: &str = include_str!("recomp.h");
+pub use recomp_abi::HEADER;
 
 /// what the lowering of one instruction may refer to.
 pub(crate) struct Scope<'a> {

@@ -4,8 +4,9 @@
 //! rom reads the title, discover finds its functions, codegen writes them as
 //! C against recomp.h, with any overrides in place of the functions they
 //! replace, and compile builds that into a shared or a static library. port
-//! makes a program of a title out of the static one, and abi, with the host
-//! feature, loads the shared one from Rust.
+//! makes a program of a title out of the static one. abi is the interface
+//! the code runs against, which loads the shared one from Rust with the
+//! host feature.
 //!
 //! ```no_run
 //! let title = recomp3ds::rom::Title::load("game.3ds")?;
@@ -16,8 +17,7 @@
 //! # Ok::<(), recomp3ds::rom::Error>(())
 //! ```
 
-#[cfg(feature = "host")]
-pub mod abi;
+pub use recomp_abi as abi;
 mod arm;
 pub mod codegen;
 pub mod compile;

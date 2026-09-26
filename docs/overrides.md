@@ -30,7 +30,7 @@ Then pass the file, or a directory of them, to `build` or `port`:
 ```
 
 The files are compiled with the generated code, so everything in
-[`recomp.h`](../src/codegen/recomp.h) is available: the context, the memory
+[`recomp.h`](../abi/recomp.h) is available: the context, the memory
 helpers such as `mem_read32` and `mem_write32`, and the `CALL` and
 `RETURN_TO` macros. [The interface](interface.md) describes them.
 

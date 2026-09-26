@@ -202,7 +202,7 @@ fn port(path: &str, dir: &Path, options: &Options) {
 #[cfg(feature = "verify")]
 fn check(path: &str, library: &Path, count: usize) {
     let (title, programs) = load(path);
-    let library = abi::Library::open(library).unwrap_or_else(|error| {
+    let mut library = abi::Library::open(library).unwrap_or_else(|error| {
         eprintln!("could not open {}, {error}", library.display());
         exit(1);
     });
@@ -230,7 +230,7 @@ fn check(path: &str, library: &Path, count: usize) {
     let files = module_files(&title);
     let crs = static_module(&title);
     for (module, bytes) in &files {
-        let Some(index) = library.modules().iter().position(|m| m.name() == module.name) else { continue };
+        let Some(index) = library.module_index(&module.name) else { continue };
         let Some(program) = module.program(bytes, &imported(&files, crs.as_ref(), module)) else { continue };
         let mut memory = regions.clone();
         memory.push(verify::Region {

@@ -2,7 +2,7 @@
 
 `3dsrecomp build` turns a title into a shared library. Nothing in the library
 depends on a particular emulator. It runs against a small interface, declared
-in [`recomp.h`](../src/codegen/recomp.h). Any program that implements that
+in [`recomp.h`](../abi/recomp.h). Any program that implements that
 interface can run the code. This document calls that program the host.
 
 This page describes version 4 of the interface.
@@ -300,9 +300,11 @@ into a program instead of loaded from a library, see
 
 ## Reference hosts
 
-- [`src/abi.rs`](../src/abi.rs) is the interface in Rust. It loads the
-  library, does the lookups and places the modules. Other crates can use it
-  as `recomp3ds::abi` with the `host` feature.
+- [`abi/`](../abi) is the interface in Rust, the `recomp-abi` crate, with
+  `recomp.h` beside it and a test that holds the two to the same layout.
+  It loads a library or takes code linked in, does the lookups and places
+  the modules. A Rust host only needs this crate, which is what Zakuro
+  uses.
 - [`src/verify.rs`](../src/verify.rs) is a complete host built on Zakuro's
   interpreter. It runs each recompiled function against the interpreter and
   compares the results (`--features verify`).

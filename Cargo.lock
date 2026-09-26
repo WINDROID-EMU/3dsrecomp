@@ -49,10 +49,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "recomp3ds"
+name = "recomp-abi"
 version = "0.1.0"
 dependencies = [
  "libloading",
+]
+
+[[package]]
+name = "recomp3ds"
+version = "0.1.0"
+dependencies = [
+ "recomp-abi",
  "zakuro-cpu",
 ]
 
