@@ -8,24 +8,48 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 /// floating point has to round exactly the way the interpreter does, so
 /// nothing may be fused into a multiply-add.
-const FLAGS: &[&str] = &["-O2", "-fPIC", "-fvisibility=hidden", "-ffp-contract=off", "-fno-math-errno", "-w"];
+const FLAGS: &[&str] = &["-O2", "-ffp-contract=off", "-fno-math-errno", "-w"];
+/// what only matters for ELF and Mach-O, and that compilers for Windows
+/// refuse or ignore.
+const UNIX_FLAGS: &[&str] = &["-fPIC", "-fvisibility=hidden"];
 
 /// what progress hears after each file, how many are done and of how
 /// many, answering whether to go on.
 pub type Progress<'a> = &'a (dyn Fn(usize, usize) -> bool + Sync);
 
-/// the C compiler, from CC or else cc.
+/// whether a program runs, asked for its version.
+fn runs(program: &str) -> bool {
+    Command::new(program).arg("--version").stdout(Stdio::null()).stderr(Stdio::null()).status().is_ok_and(|s| s.success())
+}
+
+/// the first of the tools that runs, or the one named in variable.
+fn tool(variable: &str, tools: &[&str]) -> String {
+    std::env::var(variable)
+        .ok()
+        .filter(|name| !name.is_empty())
+        .or_else(|| tools.iter().find(|tool| runs(tool)).map(|tool| tool.to_string()))
+        .unwrap_or_else(|| tools[0].to_owned())
+}
+
+/// the C compiler, from CC or else the first there is. on Windows MinGW's
+/// gcc comes first, it links a DLL with nothing else installed.
 fn compiler() -> String {
-    std::env::var("CC").unwrap_or_else(|_| "cc".to_owned())
+    let compilers: &[&str] = if cfg!(windows) { &["gcc", "clang", "cc"] } else { &["cc", "gcc", "clang"] };
+    tool("CC", compilers)
 }
 
 /// whether there is a C compiler to build with.
 pub fn check() -> Result<(), String> {
     let compiler = compiler();
-    match Command::new(&compiler).arg("--version").stdout(Stdio::null()).stderr(Stdio::null()).status() {
-        Ok(status) if status.success() => Ok(()),
-        _ => Err(format!("there is no C compiler ({compiler}), install one such as gcc or clang, or name it in CC")),
+    if runs(&compiler) {
+        return Ok(());
     }
+    let suggestion = if cfg!(windows) {
+        "install MinGW-w64's gcc, from MSYS2 or WinLibs, or LLVM's clang"
+    } else {
+        "install one such as gcc or clang"
+    };
+    Err(format!("there is no C compiler ({compiler}), {suggestion}, or name it in CC"))
 }
 
 /// compiles sources, file names inside dir, and links them into library,
@@ -53,6 +77,7 @@ pub fn objects(dir: &Path, sources: &[String], progress: Progress) -> Result<Vec
                     let path = dir.join(source);
                     let status = Command::new(&compiler)
                         .args(FLAGS)
+                        .args(if cfg!(windows) { &[][..] } else { UNIX_FLAGS })
                         .arg("-I")
                         .arg(dir)
                         .arg("-c")
@@ -80,9 +105,15 @@ pub fn objects(dir: &Path, sources: &[String], progress: Progress) -> Result<Vec
     Ok(sources.iter().map(|source| dir.join(source).with_extension("o")).collect())
 }
 
-/// links objects into a shared library.
+/// links objects into a shared library. on Windows gcc's runtime goes in
+/// with it, so the DLL needs no other DLL beside it.
 pub fn shared(objects: &[PathBuf], library: &Path) -> Result<(), String> {
-    let status = Command::new(compiler()).arg("-shared").arg("-o").arg(library).args(objects).status();
+    let compiler = compiler();
+    let mut command = Command::new(&compiler);
+    if cfg!(windows) && compiler.contains("gcc") {
+        command.arg("-static-libgcc");
+    }
+    let status = command.arg("-shared").arg("-o").arg(library).args(objects).status();
     match status {
         Ok(status) if status.success() => Ok(()),
         _ => Err("linking failed".to_owned()),
@@ -95,7 +126,7 @@ pub fn archive(objects: &[PathBuf], library: &Path) -> Result<(), String> {
     if library.exists() {
         std::fs::remove_file(library).map_err(|e| format!("could not replace {}, {e}", library.display()))?;
     }
-    let ar = std::env::var("AR").unwrap_or_else(|_| "ar".to_owned());
+    let ar = tool("AR", &["ar", "llvm-ar"]);
     let status = Command::new(&ar).arg("rcs").arg(library).args(objects).status();
     match status {
         Ok(status) if status.success() => Ok(()),

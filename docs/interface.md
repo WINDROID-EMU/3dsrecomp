@@ -16,16 +16,19 @@ This page describes version 4 of the interface.
 - one header per program, with the prototypes of its functions;
 - `code000.c`, `code001.c` and so on, which hold the functions;
 - `<program id>.so`, all of the above compiled. The name is 16 uppercase hex
-  digits, for example `000400000011C500.so`.
+  digits, for example `000400000011C500.so`. On Windows it is a `.dll`, and
+  on macOS a `.dylib`.
 
-The compiler comes from `CC`, and `cc` is used when `CC` is not set. To
-compile the sources yourself, keep `-ffp-contract=off`. Without it, the
-compiler can fuse a multiply and an add, which rounds differently from the
-guest.
+The compiler comes from `CC`. When `CC` is not set, the first of `cc`, `gcc`
+and `clang` that runs is used. On Windows, `gcc` from MinGW-w64 is tried
+first, then `clang`. To compile the sources yourself, keep
+`-ffp-contract=off`. Without it, the compiler can fuse a multiply and an
+add, which rounds differently from the guest.
 
 Without a directory, `3dsrecomp build <rom>` works in the cache
 (`~/.cache/3dsrecomp/<title id>`) and then installs the library at
-`~/.local/share/3dsrecomp/<title id>.so`, or the system's equivalent. A
+`~/.local/share/3dsrecomp/<title id>.so`, or the system's equivalent,
+`%APPDATA%\3dsrecomp\<title id>.dll` on Windows. A
 host that looks there finds the code for a title without being told where
 it is. In Rust, `recomp_abi::installed(title_id)` does the looking, and
 Zakuro does it on its own.

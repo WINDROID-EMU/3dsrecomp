@@ -31,6 +31,10 @@ at a local checkout instead.
 You need Rust, a C compiler and `ar`. Linking pulls in hundreds of megabytes
 of objects, so the first build takes a while.
 
+On Windows, the C compiler has to match the Rust toolchain. With Rust's
+MSVC toolchain, the default, use LLVM's `clang` and `llvm-ar`, set in `CC`
+and `AR`. With the GNU toolchain, use MinGW-w64's `gcc` and `ar`.
+
 ## Running it
 
 ```

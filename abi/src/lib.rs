@@ -35,9 +35,10 @@ pub fn library_dir() -> Option<PathBuf> {
     dir.map(|dir| dir.join("3dsrecomp"))
 }
 
-/// the file a title's library goes by, named after its title id.
+/// the file a title's library goes by, named after its title id, with the
+/// system's extension for them, so, dll or dylib.
 pub fn library_name(program_id: u64) -> String {
-    format!("{program_id:016X}.so")
+    format!("{program_id:016X}.{}", std::env::consts::DLL_EXTENSION)
 }
 
 /// the library installed for a title, if there is one.
@@ -305,12 +306,17 @@ int main(void) {
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("recomp.h"), HEADER).unwrap();
         std::fs::write(dir.join("layout.c"), LAYOUT).unwrap();
-        let compiler = std::env::var("CC").unwrap_or_else(|_| "cc".to_owned());
-        let built = Command::new(compiler)
-            .args(["-w", "-o", "layout", "layout.c", "-lm"])
-            .current_dir(&dir)
-            .status()
-            .is_ok_and(|status| status.success());
+        // CC, else the first compiler there is, which on Windows is rarely cc
+        let compilers = std::env::var("CC").map_or_else(|_| vec!["cc".to_owned(), "gcc".to_owned(), "clang".to_owned()], |cc| vec![cc]);
+        let math: &[&str] = if cfg!(unix) { &["-lm"] } else { &[] };
+        let built = compilers.iter().any(|compiler| {
+            Command::new(compiler)
+                .args(["-w", "-o", "layout", "layout.c"])
+                .args(math)
+                .current_dir(&dir)
+                .status()
+                .is_ok_and(|status| status.success())
+        });
         if !built {
             eprintln!("no C compiler to build the header with, its layout went unchecked");
             return;

@@ -78,7 +78,11 @@ typedef struct Module {
     const Entry *entries;
 } Module;
 
+#ifdef _WIN32
+#define RECOMP_EXPORT __declspec(dllexport)
+#else
 #define RECOMP_EXPORT __attribute__((visibility("default")))
+#endif
 #define LIKELY(x) __builtin_expect(!!(x), 1)
 #define UNLIKELY(x) __builtin_expect(!!(x), 0)
 

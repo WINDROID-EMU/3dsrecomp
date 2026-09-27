@@ -156,7 +156,7 @@ pub fn cache_dir(program_id: u64) -> PathBuf {
 pub fn install(library: &Path, program_id: u64) -> Result<PathBuf, String> {
     let dir = abi::library_dir().ok_or("there is no place to install the library")?;
     let target = dir.join(abi::library_name(program_id));
-    let partial = target.with_extension("so.new");
+    let partial = target.with_extension(format!("{}.new", std::env::consts::DLL_EXTENSION));
     std::fs::create_dir_all(&dir)
         .and_then(|()| std::fs::copy(library, &partial))
         .and_then(|_| std::fs::rename(&partial, &target))
