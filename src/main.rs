@@ -10,12 +10,12 @@
 use std::path::{Path, PathBuf};
 use std::process::exit;
 
+use recomp3ds::build::{self, Event};
 use recomp3ds::discover::{self, Analysis, Byte, Mode, Program, Source};
-use recomp3ds::overrides::Override;
 use recomp3ds::rom::Title;
-use recomp3ds::{abi, codegen, compile, overrides, port};
+use recomp3ds::{compile, port};
 #[cfg(feature = "verify")]
-use recomp3ds::{image, imported, module_files, static_module, verify};
+use recomp3ds::{abi, codegen, image, imported, module_files, static_module, verify};
 
 const USAGE: &str = "\
 usage, 3dsrecomp analyze <rom>
@@ -93,148 +93,49 @@ fn load(path: &str) -> (Title, Vec<(String, Program)>) {
     (title, programs)
 }
 
-/// writes the title's code as C in the dir it picks, the overrides with it,
-/// returning the title, the dir and the sources to compile.
-fn generate(path: &str, pick: impl FnOnce(&Title) -> PathBuf, options: &Options) -> (Title, PathBuf, Vec<String>) {
-    let (title, mut programs) = load(path);
-    let dir = pick(&title);
-    let dir = dir.as_path();
-    let files = match &options.overrides {
-        Some(path) => overrides::load(path).unwrap_or_else(|error| {
-            eprintln!("{error}");
-            exit(1);
-        }),
-        None => Vec::new(),
-    };
-    let replaced: Vec<Override> = files.iter().flat_map(|file| file.overrides.iter().cloned()).collect();
-    // whatever an override replaces has to be generated too, for it to call
-    for item in &replaced {
-        let name = item.module.as_deref().unwrap_or("executable");
-        let Some((_, program)) = programs.iter_mut().find(|(program, _)| program == name) else {
-            eprintln!("the title has no module called {name}");
-            exit(1);
-        };
-        program.seeds.insert(0, (item.address, Source::Override));
-    }
-
-    let analyses: Vec<Analysis> = programs.iter().map(|(_, program)| discover::analyze(program)).collect();
-    for item in &replaced {
-        let index = programs.iter().position(|(name, _)| Some(name.as_str()) == item.module.as_deref()).unwrap_or(0);
-        let thumb = item.address & 1 != 0;
-        let found = analyses[index]
-            .functions
-            .values()
-            .any(|f| (f.mode == Mode::Thumb) == thumb && f.labels.contains(&(item.address & !1)));
-        if !found {
-            println!("no code at 0x{:08X} for {} to replace, so it cannot call the original", item.address, item.name);
-        }
-    }
-    let units: Vec<codegen::Unit> = programs
-        .iter()
-        .zip(&analyses)
-        .enumerate()
-        .map(|(i, ((name, program), analysis))| codegen::Unit {
-            module: (i > 0).then_some(name.as_str()),
-            program,
-            analysis,
-        })
-        .collect();
-    let generated = codegen::generate(&units, &replaced);
-
-    let fail = |what: &Path, error: std::io::Error| -> ! {
-        eprintln!("could not write {}, {error}", what.display());
-        exit(1);
-    };
-    let made = if files.is_empty() { std::fs::create_dir_all(dir) } else { std::fs::create_dir_all(dir.join("hand")) };
-    if let Err(error) = made {
-        fail(dir, error);
-    }
-    for (name, contents) in &generated {
-        let path = dir.join(name);
-        if let Err(error) = std::fs::write(&path, contents) {
-            fail(&path, error);
-        }
-    }
-    let mut sources: Vec<String> =
-        generated.iter().map(|(name, _)| name.clone()).filter(|name| name.ends_with(".c")).collect();
-    for file in &files {
-        let name = format!("hand/{}", file.path.file_name().unwrap_or_default().to_string_lossy());
-        let path = dir.join(&name);
-        if let Err(error) = std::fs::write(&path, &file.source) {
-            fail(&path, error);
-        }
-        sources.push(name);
-    }
-    let size: usize = generated.iter().map(|(_, contents)| contents.len()).sum();
-    println!("wrote {} files, {} MiB of C, {} overrides", generated.len(), size >> 20, replaced.len());
-    (title, dir.to_owned(), sources)
-}
-
 /// builds the library in dir, or when there is none in the cache, and then
 /// installs it where hosts look for it.
 fn build(path: &str, given: Option<&Path>, options: &Options) {
-    let (title, dir, sources) =
-        generate(path, |title| given.map(Path::to_owned).unwrap_or_else(|| cache_dir(title.program_id())), options);
-    let library = dir.join(abi::library_name(title.program_id()));
-    let start = std::time::Instant::now();
-    if let Err(error) = compile::compile(&dir, &sources, &library, &report) {
+    let build_options = build::Options { dir: given, overrides: options.overrides.as_deref(), cancel: None };
+    if let Err(error) = build::build(Path::new(path), &build_options, &print_event) {
         eprintln!("{error}");
         exit(1);
     }
-    println!("built {} in {:.1?}", library.display(), start.elapsed());
-    if given.is_none() {
-        install(&library, title.program_id());
-    }
 }
 
-/// prints how far compiling is, every twentieth of the way, which a frontend
-/// running build can follow.
-fn report(done: usize, total: usize) {
-    if done == total || done * 20 / total != (done - 1) * 20 / total {
-        println!("compiled {done} of {total}");
-    }
-}
-
-/// where build works on a title whose library it installs.
-fn cache_dir(program_id: u64) -> PathBuf {
-    let var = |name: &str| std::env::var_os(name).filter(|value| !value.is_empty()).map(PathBuf::from);
-    let base = if cfg!(windows) {
-        var("LOCALAPPDATA")
-    } else if cfg!(target_os = "macos") {
-        var("HOME").map(|home| home.join("Library/Caches"))
-    } else {
-        var("XDG_CACHE_HOME").or_else(|| var("HOME").map(|home| home.join(".cache")))
-    };
-    base.unwrap_or_else(std::env::temp_dir).join("3dsrecomp").join(format!("{program_id:016X}"))
-}
-
-/// copies the library to where hosts look for it, under another name first
-/// so that a host running the old one keeps it.
-fn install(library: &Path, program_id: u64) {
-    let Some(dir) = abi::library_dir() else {
-        eprintln!("there is no place to install the library, it stays at {}", library.display());
-        exit(1);
-    };
-    let target = dir.join(abi::library_name(program_id));
-    let partial = target.with_extension("so.new");
-    let installed = std::fs::create_dir_all(&dir)
-        .and_then(|()| std::fs::copy(library, &partial))
-        .and_then(|_| std::fs::rename(&partial, &target));
-    match installed {
-        Ok(()) => println!("installed {}, which Zakuro runs for the game from now on", target.display()),
-        Err(error) => {
-            eprintln!("could not install {}, {error}", target.display());
-            exit(1);
+/// prints what a build does, compiling every twentieth of the way, which a
+/// frontend running build can follow.
+fn print_event(event: Event) {
+    match event {
+        Event::Generated { files, bytes, overrides } => {
+            println!("wrote {files} files, {} MiB of C, {overrides} overrides", bytes >> 20)
         }
+        Event::Note(note) => println!("{note}"),
+        Event::Compiled { done, total } => {
+            if done == total || done * 20 / total != (done - 1) * 20 / total {
+                println!("compiled {done} of {total}");
+            }
+        }
+        Event::Built { library, took } => println!("built {} in {took:.1?}", library.display()),
+        Event::Installed(path) => println!("installed {}, which Zakuro runs for the game from now on", path.display()),
     }
 }
 
 /// a Cargo project at dir that builds the title into a program of its own.
 fn port(path: &str, dir: &Path, options: &Options) {
-    let (title, code, sources) = generate(path, |_| dir.join("code"), options);
+    let generated = build::generate(Path::new(path), |_| dir.join("code"), options.overrides.as_deref(), &print_event)
+        .unwrap_or_else(|error| {
+            eprintln!("{error}");
+            exit(1);
+        });
+    let (title, code) = (&generated.title, &generated.dir);
     let start = std::time::Instant::now();
-    let archived =
-        compile::objects(&code, &sources, &report).and_then(|objects| compile::archive(&objects, &code.join("librecomp.a")));
+    let progress = |done, total| {
+        print_event(Event::Compiled { done, total });
+        true
+    };
+    let archived = compile::objects(code, &generated.sources, &progress)
+        .and_then(|objects| compile::archive(&objects, &code.join("librecomp.a")));
     if let Err(error) = archived {
         eprintln!("{error}");
         exit(1);

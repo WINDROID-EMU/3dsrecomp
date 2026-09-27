@@ -19,6 +19,7 @@
 
 pub use recomp_abi as abi;
 mod arm;
+pub mod build;
 pub mod codegen;
 pub mod compile;
 pub mod cro;
