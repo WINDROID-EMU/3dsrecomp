@@ -177,13 +177,21 @@ fn build(path: &str, given: Option<&Path>, options: &Options) {
         generate(path, |title| given.map(Path::to_owned).unwrap_or_else(|| cache_dir(title.program_id())), options);
     let library = dir.join(abi::library_name(title.program_id()));
     let start = std::time::Instant::now();
-    if let Err(error) = compile::compile(&dir, &sources, &library) {
+    if let Err(error) = compile::compile(&dir, &sources, &library, &report) {
         eprintln!("{error}");
         exit(1);
     }
     println!("built {} in {:.1?}", library.display(), start.elapsed());
     if given.is_none() {
         install(&library, title.program_id());
+    }
+}
+
+/// prints how far compiling is, every twentieth of the way, which a frontend
+/// running build can follow.
+fn report(done: usize, total: usize) {
+    if done == total || done * 20 / total != (done - 1) * 20 / total {
+        println!("compiled {done} of {total}");
     }
 }
 
@@ -225,7 +233,8 @@ fn install(library: &Path, program_id: u64) {
 fn port(path: &str, dir: &Path, options: &Options) {
     let (title, code, sources) = generate(path, |_| dir.join("code"), options);
     let start = std::time::Instant::now();
-    let archived = compile::objects(&code, &sources).and_then(|objects| compile::archive(&objects, &code.join("librecomp.a")));
+    let archived =
+        compile::objects(&code, &sources, &report).and_then(|objects| compile::archive(&objects, &code.join("librecomp.a")));
     if let Err(error) = archived {
         eprintln!("{error}");
         exit(1);

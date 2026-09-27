@@ -10,16 +10,18 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 /// nothing may be fused into a multiply-add.
 const FLAGS: &[&str] = &["-O2", "-fPIC", "-fvisibility=hidden", "-ffp-contract=off", "-fno-math-errno", "-w"];
 
-/// compiles sources, file names inside dir, and links them into library.
-pub fn compile(dir: &Path, sources: &[String], library: &Path) -> Result<(), String> {
-    shared(&objects(dir, sources)?, library)
+/// compiles sources, file names inside dir, and links them into library,
+/// telling progress how many of them are done after each one.
+pub fn compile(dir: &Path, sources: &[String], library: &Path, progress: &(dyn Fn(usize, usize) + Sync)) -> Result<(), String> {
+    shared(&objects(dir, sources, progress)?, library)
 }
 
 /// compiles sources, file names inside dir, each into an object beside it.
-pub fn objects(dir: &Path, sources: &[String]) -> Result<Vec<PathBuf>, String> {
+pub fn objects(dir: &Path, sources: &[String], progress: &(dyn Fn(usize, usize) + Sync)) -> Result<Vec<PathBuf>, String> {
     let compiler = std::env::var("CC").unwrap_or_else(|_| "cc".to_owned());
     let jobs = std::thread::available_parallelism().map_or(4, |n| n.get());
     let next = AtomicUsize::new(0);
+    let done = AtomicUsize::new(0);
     let failures = Mutex::new(Vec::new());
     std::thread::scope(|scope| {
         for _ in 0..jobs {
@@ -38,6 +40,7 @@ pub fn objects(dir: &Path, sources: &[String]) -> Result<Vec<PathBuf>, String> {
                     if !status.is_ok_and(|s| s.success()) {
                         failures.lock().unwrap().push(source.clone());
                     }
+                    progress(done.fetch_add(1, Ordering::Relaxed) + 1, sources.len());
                 }
             });
         }
