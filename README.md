@@ -4,7 +4,7 @@ This is a static recompiler for Nintendo 3DS games, made to run with [Zakuro](ht
 
 It reads a game's code, finds the functions in it and turns them into C, which compiles into a library the emulator loads. Anything it can't handle or didn't find still runs in Zakuro's interpreter, so a game doesn't have to be fully recompiled to work.
 
-So far it has been tested with a few games like Pokémon Alpha Sapphire and Pokémon Y, with more than 99% of the instructions it runs coming from the library. With Zakuro now drawing on the GPU, the game runs about twice as fast as it did on the interpreter.
+It's what Zakuro uses instead of a JIT. So far it has been tested with Pokémon Alpha Sapphire, Pokémon Y, The Legend of Zelda: Majora's Mask 3D and Persona Q, with about 99.8% of the instructions they run coming from the library (Pokémon Y interprets 0.21% of them, Persona Q 0.26%).
 
 ## Features
 
@@ -18,7 +18,7 @@ So far it has been tested with a few games like Pokémon Alpha Sapphire and Pok�
 
 ## How to use
 
-You need Rust and a C compiler. I've only tested on Linux so far.
+You need Rust and a C compiler. It works on Linux and Windows, where gcc from MinGW-w64 (through MSYS2 or WinLibs) works.
 
 ```
 cargo build --release
