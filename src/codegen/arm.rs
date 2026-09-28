@@ -47,7 +47,7 @@ fn body(out: &mut String, scope: &Scope, a: u32, op: u32) -> bool {
         // msr with an immediate lives in the compare opcodes without s, and
         // with no fields to write it is nop and the other hints
         0b001 if (op >> 23) & 3 == 0b10 && op & (1 << 20) == 0 => {
-            if op & (1 << 21) != 0 && (op >> 16) & 0xF == 0 { true } else { interpret(out, scope, a, op) }
+            if op & (1 << 21) != 0 && (op >> 16) & 0xF == 0 { true } else { status_register(out, scope, a, op) }
         }
         0b001 => data_processing(out, scope, a, op),
         0b010 => single_transfer(out, scope, a, op),
@@ -101,6 +101,7 @@ fn register_space(out: &mut String, scope: &Scope, a: u32, op: u32) -> bool {
     }
     if (op >> 23) & 3 == 0b10 && op & (1 << 20) == 0 {
         return match (op >> 4) & 0xF {
+            0b0000 => status_register(out, scope, a, op),
             0b0001 if (op >> 21) & 3 == 0b11 => clz(out, scope, a, op),
             0b0001 | 0b0011 => branch_exchange(out, scope, a, op),
             0b0101 => saturating(out, scope, a, op),
@@ -113,6 +114,48 @@ fn register_space(out: &mut String, scope: &Scope, a: u32, op: u32) -> bool {
 
 fn interpret(out: &mut String, scope: &Scope, a: u32, op: u32) -> bool {
     emit!(out, "    INTERPRET({}, 0x{op:08X}u);", scope.at(a));
+    scope.interpreted.borrow_mut().push(a);
+    true
+}
+
+/// mrs and msr on the cpsr. titles run in system mode and only ever change
+/// the flags and ge this way, so reading gives those over that mode, and a
+/// write to anything else, or the spsr, is the interpreter's.
+fn status_register(out: &mut String, scope: &Scope, a: u32, op: u32) -> bool {
+    if op & (1 << 22) != 0 {
+        return interpret(out, scope, a, op);
+    }
+    if op & (1 << 21) == 0 {
+        let rd = (op >> 12) & 0xF;
+        if rd == 15 {
+            return interpret(out, scope, a, op);
+        }
+        emit!(
+            out,
+            "    ctx->r[{rd}] = ((uint32_t)ctx->n << 31) | ((uint32_t)ctx->z << 30) | ((uint32_t)ctx->c << 29) \
+             | ((uint32_t)ctx->v << 28) | ((uint32_t)ctx->q << 27) | ((uint32_t)(ctx->ge & 0xF) << 16) | 0x1Fu;"
+        );
+        return true;
+    }
+    let mask = (op >> 16) & 0xF;
+    if mask & 0b0011 != 0 {
+        return interpret(out, scope, a, op);
+    }
+    let value = if op & (1 << 25) != 0 {
+        format!("0x{:08X}u", (op & 0xFF).rotate_right(((op >> 8) & 0xF) * 2))
+    } else {
+        reg(scope, op & 0xF, a + 8)
+    };
+    emit!(out, "    {{");
+    emit!(out, "    uint32_t value = {value};");
+    if mask & 0b1000 != 0 {
+        emit!(out, "    ctx->n = value >> 31; ctx->z = (value >> 30) & 1; ctx->c = (value >> 29) & 1;");
+        emit!(out, "    ctx->v = (value >> 28) & 1; ctx->q = (value >> 27) & 1;");
+    }
+    if mask & 0b0100 != 0 {
+        emit!(out, "    ctx->ge = (value >> 16) & 0xF;");
+    }
+    emit!(out, "    }}");
     true
 }
 
