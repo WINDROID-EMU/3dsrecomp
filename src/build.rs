@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use crate::discover::{self, Analysis, Mode, Source};
+use crate::discover::{self, Analysis, Mode, Program, Source};
 use crate::overrides::{self, Override};
 use crate::rom::Title;
 use crate::{abi, codegen, compile};
@@ -69,7 +69,13 @@ pub fn generate(
         program.seeds.insert(0, (item.address, Source::Override));
     }
 
-    let analyses: Vec<Analysis> = programs.iter().map(|(_, program)| discover::analyze(program)).collect();
+    let mut analyses: Vec<Analysis> = programs.iter().map(|(_, program)| discover::analyze(program)).collect();
+    let (labels, functions) = apply_hints(&title, &mut programs, &mut analyses);
+    if labels + functions > 0 {
+        events(Event::Note(format!(
+            "of the places Zakuro interpreted, {labels} become ways into functions and {functions} start new ones"
+        )));
+    }
     for item in &replaced {
         let index = programs.iter().position(|(name, _)| Some(name.as_str()) == item.module.as_deref()).unwrap_or(0);
         let thumb = item.address & 1 != 0;
@@ -136,6 +142,60 @@ pub fn build(rom: &Path, options: &Options, events: &(dyn Fn(Event) + Sync)) -> 
     let installed = install(&library, program_id)?;
     events(Event::Installed(installed.clone()));
     Ok(installed)
+}
+
+/// takes in where the emulator had to interpret the title's last library,
+/// which only ever ran code. a place inside a function found already
+/// becomes a way into it, and the rest start functions, found by analyzing
+/// the executable again. says how many of each.
+pub fn apply_hints(title: &Title, programs: &mut [(String, Program)], analyses: &mut [Analysis]) -> (usize, usize) {
+    let Some(index) = programs.iter().position(|(name, _)| name == "executable") else { return (0, 0) };
+    let program = &mut programs[index].1;
+    let text = program.text.base..program.text.end();
+    let hinted: Vec<u32> = hints(title.program_id()).into_iter().filter(|&address| text.contains(&(address & !1))).collect();
+    if hinted.is_empty() {
+        return (0, 0);
+    }
+    let owners = |analysis: &Analysis| {
+        let mut owners = std::collections::HashMap::new();
+        for (&entry, function) in &analysis.functions {
+            let thumb = (function.mode == Mode::Thumb) as u32;
+            for &address in &function.instructions {
+                owners.entry(address | thumb).or_insert(entry);
+            }
+        }
+        owners
+    };
+    let outside: Vec<u32> = {
+        let owners = owners(&analyses[index]);
+        hinted.iter().copied().filter(|address| !owners.contains_key(address)).collect()
+    };
+    if !outside.is_empty() {
+        program.seeds.extend(outside.iter().map(|&address| (address, Source::Hint)));
+        analyses[index] = discover::analyze(program);
+    }
+    let owners = owners(&analyses[index]);
+    let mut labels = 0;
+    for address in hinted.iter().filter(|address| !outside.contains(address)) {
+        let Some(entry) = owners.get(address) else { continue };
+        if let Some(function) = analyses[index].functions.get_mut(entry) {
+            labels += function.labels.insert(address & !1) as usize;
+        }
+    }
+    (labels, outside.len())
+}
+
+/// the addresses Zakuro wrote down next to a title's library, those it ran
+/// in its interpreter for want of code, odd for Thumb.
+pub fn hints(program_id: u64) -> Vec<u32> {
+    let Some(dir) = abi::library_dir() else { return Vec::new() };
+    let path = dir.join(abi::library_name(program_id)).with_extension("hints");
+    let Ok(text) = std::fs::read_to_string(path) else { return Vec::new() };
+    text.lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .filter_map(|line| u32::from_str_radix(line.trim_start_matches("0x"), 16).ok())
+        .collect()
 }
 
 /// where build works on a title whose library it installs.

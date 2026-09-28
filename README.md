@@ -12,7 +12,7 @@ It's what Zakuro uses instead of a JIT. So far it has been tested with Pokémon 
 - generating C for ARM, Thumb and VFP code, with the less common instructions going through the interpreter
 - modules get code that works wherever the game loads them
 - checking every recompiled function against Zakuro's interpreter, running both from the same state and comparing registers, flags and memory
-- running it in Zakuro, which finds the library build installs on its own
+- running it in Zakuro, which finds the library build installs on its own, and writes down where it still had to interpret, which the next build takes in
 - replacing any function with one written by hand in C, for fixes, mods or faster versions, see [docs/overrides.md](docs/overrides.md)
 - making a game into a program of its own, with the code linked into Zakuro instead of loaded by it, see [docs/port.md](docs/port.md)
 

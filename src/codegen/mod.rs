@@ -29,6 +29,9 @@ pub(crate) struct Scope<'a> {
     /// whether the code moves, so that addresses are offsets from where the
     /// host loaded it.
     pub relative: bool,
+    /// the instructions left to the interpreter, which can end the code's
+    /// run, so that it gets entered again right after them.
+    pub interpreted: &'a std::cell::RefCell<Vec<u32>>,
 }
 
 impl Scope<'_> {
@@ -206,6 +209,8 @@ pub fn generate(units: &[Unit], overrides: &[Override]) -> Vec<(String, String)>
         files.push((header.clone(), prototypes));
 
         let include = format!("#include \"{header}\"\n\n");
+        // each function's labels with those after what it interprets
+        let mut resumed: BTreeMap<u32, BTreeSet<u32>> = BTreeMap::new();
         for (&entry, function) in &functions {
             if source.is_empty() {
                 source.push_str("#include \"recomp.h\"\n");
@@ -213,9 +218,23 @@ pub fn generate(units: &[Unit], overrides: &[Override]) -> Vec<(String, String)>
             if included.insert(index) {
                 source.push_str(&include);
             }
-            let scope =
-                Scope { labels: &function.labels, functions: &names, prefix: &prefix, relative: unit.module.is_some() };
-            write_function(&mut source, unit.program, &scope, entry, function);
+            // written once to see what goes to the interpreter, the code
+            // can stop after any of those, and then again with a label
+            // after each, where the host comes back in
+            let interpreted = std::cell::RefCell::new(Vec::new());
+            let relative = unit.module.is_some();
+            let scope = Scope { labels: &function.labels, functions: &names, prefix: &prefix, relative, interpreted: &interpreted };
+            write_function(&mut String::new(), unit.program, &scope, entry, function);
+            let mut resumable = (*function).clone();
+            for address in interpreted.take() {
+                let at = function.instructions.iter().position(|&a| a == address);
+                if let Some(&next) = at.and_then(|i| function.instructions.get(i + 1)) {
+                    resumable.labels.insert(next);
+                }
+            }
+            let scope = Scope { labels: &resumable.labels, functions: &names, prefix: &prefix, relative, interpreted: &interpreted };
+            write_function(&mut source, unit.program, &scope, entry, &resumable);
+            resumed.insert(entry, resumable.labels);
             size += function.instructions.len();
             if size >= FILE_SIZE {
                 sources.push(std::mem::take(&mut source));
@@ -229,7 +248,7 @@ pub fn generate(units: &[Unit], overrides: &[Override]) -> Vec<(String, String)>
         let mut entries: BTreeMap<u32, String> = BTreeMap::new();
         for (&entry, function) in &functions {
             let owner = name(&prefix, entry, function.mode == Mode::Thumb);
-            for &label in &function.labels {
+            for &label in resumed.get(&entry).unwrap_or(&function.labels) {
                 let slot = entries.entry(key(label, function.mode)).or_insert_with(|| owner.clone());
                 if label == entry {
                     slot.clone_from(&owner);

@@ -27,6 +27,9 @@ pub enum Source {
     /// an address a function written by hand replaces, which its author
     /// says is code.
     Override,
+    /// an address Zakuro had to interpret with the title's last library,
+    /// code nothing else led to.
+    Hint,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

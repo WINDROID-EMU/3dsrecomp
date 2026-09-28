@@ -14,6 +14,7 @@ macro_rules! emit {
 
 fn interpret(out: &mut String, scope: &Scope, a: u32, op: u32) -> bool {
     emit!(out, "    INTERPRET({}, 0x{op:08X}u);", scope.at(a));
+    scope.interpreted.borrow_mut().push(a);
     true
 }
 

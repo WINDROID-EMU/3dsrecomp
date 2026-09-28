@@ -30,6 +30,7 @@ fn reg(scope: &Scope, register: u32, a: u32) -> String {
 
 fn interpret(out: &mut String, scope: &Scope, a: u32, op: u32) -> bool {
     emit!(out, "    INTERPRET({}, 0x{op:04X}u);", scope.at(a));
+    scope.interpreted.borrow_mut().push(a);
     true
 }
 

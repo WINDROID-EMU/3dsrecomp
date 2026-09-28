@@ -238,13 +238,17 @@ fn print_report(name: &str, report: &verify::Report) {
 }
 
 fn analyze(path: &str) {
-    let (title, programs) = load(path);
+    let (title, mut programs) = load(path);
     let module_count = programs.len() - 1;
     let start = std::time::Instant::now();
-    let analyses: Vec<Analysis> = programs.iter().map(|(_, program)| discover::analyze(program)).collect();
+    let mut analyses: Vec<Analysis> = programs.iter().map(|(_, program)| discover::analyze(program)).collect();
+    let (labels, functions) = build::apply_hints(&title, &mut programs, &mut analyses);
     let elapsed = start.elapsed();
 
     println!("title       {}, {} modules", title.exheader.title, module_count);
+    if labels + functions > 0 {
+        println!("hints       {labels} ways into functions, {functions} new functions, from where Zakuro interpreted");
+    }
     println!();
     println!("                  KiB  functions   code  literals  unreached  indirect  switches    svc  dead ends");
     let executable = Totals::of(&analyses[0]);
@@ -257,13 +261,14 @@ fn analyze(path: &str) {
     let functions = || analyses.iter().flat_map(|analysis| analysis.functions.values());
     let from = |source: Source| functions().filter(|f| f.source == source).count();
     println!(
-        "found by    {} calls, {} pointers, {} relocations, {} exports, {} imports, {} scanned, {} entry",
+        "found by    {} calls, {} pointers, {} relocations, {} exports, {} imports, {} scanned, {} hinted, {} entry",
         from(Source::Call),
         from(Source::Pointer),
         from(Source::Relocation),
         from(Source::Export),
         from(Source::Import),
         from(Source::Scan),
+        from(Source::Hint),
         from(Source::Entry)
     );
     let thumb = functions().filter(|f| f.mode == Mode::Thumb).count();
