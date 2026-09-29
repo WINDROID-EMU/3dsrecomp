@@ -2,6 +2,8 @@
 
 This is a static recompiler for Nintendo 3DS games, made to run with [Zakuro](https://github.com/fearkov/zakuro). It's a WIP.
 
+Bug reports, progress and everything else are on the [Discord server](https://discord.gg/7dduXVv2xm).
+
 It reads a game's code, finds the functions in it and turns them into C, which compiles into a library the emulator loads. Anything it can't handle or didn't find still runs in Zakuro's interpreter, so a game doesn't have to be fully recompiled to work.
 
 It's what Zakuro uses instead of a JIT. So far it has been tested with Pokémon Alpha Sapphire, Pokémon Y, The Legend of Zelda: Majora's Mask 3D and Persona Q, with about 99.8% of the instructions they run coming from the library (Pokémon Y interprets 0.21% of them, Persona Q 0.26%).
