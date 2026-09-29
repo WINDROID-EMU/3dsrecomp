@@ -99,17 +99,23 @@ pub fn data_processing(out: &mut String, scope: &Scope, a: u32, op: u32) -> bool
 fn extension(out: &mut String, scope: &Scope, a: u32, op: u32, double: bool, rd: u32, rm: u32) -> bool {
     let top = op & (1 << 7) != 0;
     match ((op >> 16) & 0xF, top) {
-        // vmov, vabs, vneg and vsqrt, singles move their bits untouched
+        // vmov, vabs, vneg and vsqrt, moves and signs change bits untouched,
+        // a double's too, which can be two singles reading as a subnormal
         (0b0000 | 0b0001, _) => {
             let second = (op >> 16) & 1 != 0;
             let body = if double {
-                let value = match (second, top) {
-                    (false, false) => "v",
-                    (false, true) => "fabs(v)",
-                    (true, false) => "-v",
-                    (true, true) => "sqrt(v)",
+                let (d, m) = (2 * (rd & 15), 2 * (rm & 15));
+                let high = match (second, top) {
+                    (false, false) => format!("ctx->vfp[{}]", m + 1),
+                    (false, true) => format!("ctx->vfp[{}] & 0x7FFFFFFFu", m + 1),
+                    (true, false) => format!("ctx->vfp[{}] ^ 0x80000000u", m + 1),
+                    (true, true) => String::new(),
                 };
-                format!("double v = {}; {}", get(true, rm), set(true, rd, value))
+                if high.is_empty() {
+                    format!("double v = {}; {}", get(true, rm), set(true, rd, "sqrt(v)"))
+                } else {
+                    format!("uint32_t low = ctx->vfp[{m}], high = {high}; ctx->vfp[{d}] = low; ctx->vfp[{}] = high;", d + 1)
+                }
             } else {
                 match (second, top) {
                     (false, false) => format!("ctx->vfp[{rd}] = ctx->vfp[{rm}];"),

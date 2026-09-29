@@ -422,7 +422,13 @@ static void vfp_vector(Context *ctx, int op, int wide, int d, int n, int m) {
     for (int i = 0; i < length; i++) {
         int dd = vfp_step(d, bank, i, stride), nn = vfp_step(n, bank, i, stride);
         int mm = m < bank ? m : vfp_step(m, bank, i, stride);
-        if (wide) {
+        if (wide && op >= 9 && op <= 11) {
+            /* the same for doubles, whose bits can be two singles that read
+               as a subnormal double and would be flushed */
+            uint32_t low = ctx->vfp[2 * (mm & 15)], high = ctx->vfp[2 * (mm & 15) + 1];
+            ctx->vfp[2 * (dd & 15)] = low;
+            ctx->vfp[2 * (dd & 15) + 1] = op == 9 ? high : op == 10 ? high & 0x7FFFFFFFu : high ^ 0x80000000u;
+        } else if (wide) {
             vfp_set_d(ctx, dd & 15, vfp_apply_d(op, vfp_d(ctx, nn & 15), vfp_d(ctx, mm & 15), vfp_d(ctx, dd & 15)));
         } else if (op >= 9 && op <= 11) {
             /* vmov, vabs and vneg move the bits untouched */
