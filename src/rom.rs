@@ -1,4 +1,4 @@
-//! reading a decrypted game dump, a .3ds cartridge image or a bare .cxi,
+//! reading a decrypted game dump, a .3ds cartridge image, a .cia or a bare .cxi,
 //! for what recompiling needs, the code and its layout from the executable
 //! partition, and the modules and their descriptions from its RomFS. only
 //! what is read is loaded, dumps run to gigabytes.
@@ -200,6 +200,50 @@ impl RomFs {
     }
 }
 
+/// a .cia's header size, which is also its first field.
+const CIA_HEADER_SIZE: u32 = 0x2020;
+
+/// where the executable content of a .cia starts. the header, certificates,
+/// ticket, TMD and contents each start on 64 bytes, and the contents follow
+/// in the order of the TMD's records, those the header's bitmap has.
+fn cia_executable(header: &[u8], mut read: impl FnMut(u64, usize) -> Result<Vec<u8>, Error>) -> Result<u64, Error> {
+    let align = |n: u64| n.next_multiple_of(0x40);
+    let bitmap = read(0x20, 0x2000)?;
+    let tmd_offset = align(align(align(CIA_HEADER_SIZE as u64) + u32_at(header, 0x08) as u64) + u32_at(header, 0x0C) as u64);
+    let contents = align(tmd_offset + u32_at(header, 0x10) as u64);
+    let tmd = read(tmd_offset, u32_at(header, 0x10) as usize)?;
+    let be16 = |at: usize| u16::from_be_bytes([tmd[at], tmd[at + 1]]);
+    let be64 = |at: usize| u64::from_be_bytes(tmd[at..at + 8].try_into().unwrap());
+    // the signature's size goes by its type, padded to 64 bytes
+    let signature = match u32::from_be_bytes(tmd[..4].try_into().unwrap()) & 0xFFFF {
+        0x0000 | 0x0003 => 0x240,
+        0x0001 | 0x0004 => 0x140,
+        0x0002 | 0x0005 => 0x80,
+        _ => return error("the .cia's TMD has an unknown signature"),
+    };
+    match be64(signature + 0x4C) >> 32 {
+        0x0004_000E => return error("this .cia is an update, not a game"),
+        0x0004_008C => return error("this .cia is downloadable content, not a game"),
+        _ => {}
+    }
+    let mut offset = contents;
+    for i in 0..be16(signature + 0x9E) as usize {
+        let record = signature + 0xC4 + 64 * 0x24 + i * 0x30;
+        let index = be16(record + 4) as usize;
+        if bitmap[index / 8] & (0x80 >> (index % 8)) == 0 {
+            continue;
+        }
+        if index == 0 {
+            if be16(record + 6) & 1 != 0 {
+                return error("the .cia is encrypted, it has to be decrypted first");
+            }
+            return Ok(offset);
+        }
+        offset = align(offset + be64(record + 8));
+    }
+    error("the .cia has no executable")
+}
+
 /// a game's executable partition.
 pub struct Title {
     file: Mutex<File>,
@@ -221,12 +265,13 @@ impl Title {
         };
 
         // a cartridge image holds the executable as its first partition, a
-        // .cxi is that partition by itself
+        // .cia as its first content, and a .cxi is that partition by itself
         let start = read(&mut file, 0, 0x200)?;
         let ncch = match &start[0x100..0x104] {
             b"NCSD" => u32_at(&start, 0x120) as u64 * MEDIA_UNIT,
             b"NCCH" => 0,
-            _ => return error("not a 3DS cartridge image or executable"),
+            _ if u32_at(&start, 0) == CIA_HEADER_SIZE => cia_executable(&start, |offset, len| read(&mut file, offset, len))?,
+            _ => return error("not a 3DS cartridge image, .cia or executable"),
         };
         let header = read(&mut file, ncch, NCCH_HEADER_SIZE as usize)?;
         if &header[0x100..0x104] != b"NCCH" {
