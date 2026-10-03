@@ -105,6 +105,62 @@
                     android:layout_marginTop="4dp"
                     android:background="@drawable/card_background" />
 
+                <!-- Driver Vulkan Personalizado (Turnip / AdrenoTools) -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="Driver Vulkan / GPU (Turnip / AdrenoTools):"
+                    android:textColor="@color/zakuro_blue_dark"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <Spinner
+                    android:id="@+id/spinnerGpuDriver"
+                    android:layout_width="match_parent"
+                    android:layout_height="44dp"
+                    android:layout_marginTop="4dp"
+                    android:background="@drawable/card_background" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginTop="6dp">
+
+                    <Button
+                        android:id="@+id/btnInstallDriver"
+                        android:layout_width="0dp"
+                        android:layout_height="38dp"
+                        android:layout_weight="1"
+                        android:backgroundTint="@color/zakuro_blue"
+                        android:text="📂 Instalar Driver (ZIP)"
+                        android:textAllCaps="false"
+                        android:textColor="@android:color/white"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <Button
+                        android:id="@+id/btnDeleteDriver"
+                        android:layout_width="wrap_content"
+                        android:layout_height="38dp"
+                        android:layout_marginStart="8dp"
+                        android:backgroundTint="#D9534F"
+                        android:text="🗑️ Excluir"
+                        android:textAllCaps="false"
+                        android:textColor="@android:color/white"
+                        android:textSize="12sp" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvDriverInfo"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:textColor="#555555"
+                    android:textSize="11sp"
+                    android:text="Driver ativo: Driver do Sistema" />
+
                 <!-- Hardware Rasterizer -->
                 <Switch
                     android:id="@+id/switchHwRaster"

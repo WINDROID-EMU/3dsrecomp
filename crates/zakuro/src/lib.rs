@@ -490,13 +490,40 @@ const CATCH_UP_LIMIT: Duration = Duration::from_millis(200);
 const MAX_SKIPPED: u32 = 4;
 
 impl ApplicationHandler for App {
+    fn suspended(&mut self, _event_loop: &ActiveEventLoop) {
+        log::info!("winit ApplicationHandler: suspended called");
+        #[cfg(target_os = "android")]
+        {
+            self.window = None;
+        }
+    }
+
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        log::info!("winit ApplicationHandler: resumed called");
         if self.window.is_some() {
             return;
         }
 
         let size = self.window_size();
         let attributes = Window::default_attributes().with_title("Zakuro").with_inner_size(size);
+
+        if let Some(backend) = &mut self.backend {
+            match event_loop.create_window(attributes) {
+                Ok(window) => {
+                    log::info!("Resumed: created new window, updating backend...");
+                    if let Err(e) = backend.update_window(&window) {
+                        log::error!("Resumed: failed to update backend window: {e}");
+                    }
+                    self.gui = Some(Gui::new(&window));
+                    self.window = Some(window);
+                    return;
+                }
+                Err(e) => {
+                    log::error!("Resumed: failed to create window: {e}");
+                    return;
+                }
+            }
+        }
         #[cfg(target_os = "android")]
         let renderer = RendererKind::Vulkan;
         #[cfg(not(target_os = "android"))]
@@ -924,6 +951,11 @@ impl App {
             event_loop.exit();
             return;
         }
+        #[cfg(target_os = "android")]
+        if self.window.is_none() {
+            std::thread::sleep(Duration::from_millis(50));
+            return;
+        }
         let now = Instant::now();
         if now > self.next_frame + CATCH_UP_LIMIT {
             self.next_frame = now;
@@ -941,10 +973,14 @@ impl App {
         }
 
         self.next_frame += FRAME_TIME;
-        // behind the schedule, showing the frame would wait on the display,
-        // so it goes unshown, a few at most
-        let behind = Instant::now() > self.next_frame;
-        if playing && behind && self.skipped < MAX_SKIPPED {
+        // On Android, always present every rendered frame to ensure smooth motion
+        // and prevent the 5 FPS slideshow caused by dropping 4 out of 5 frames.
+        #[cfg(target_os = "android")]
+        let should_skip = false;
+        #[cfg(not(target_os = "android"))]
+        let should_skip = playing && (Instant::now() > self.next_frame) && (self.skipped < MAX_SKIPPED);
+
+        if should_skip {
             self.skipped += 1;
         } else {
             self.skipped = 0;
@@ -957,7 +993,7 @@ impl App {
             self.shown = 0;
             self.last_title_update = Instant::now();
             if let Some(game) = &self.game {
-                log::debug!(target: "zakuro::fps", "{:.1} frames emulated and {shown:.1} shown a second", game.fps);
+                log::info!(target: "zakuro::fps", "{:.1} frames emulated and {shown:.1} shown a second", game.fps);
             }
             if let Some(window) = &self.window {
                 let title = match &self.game {
@@ -975,6 +1011,8 @@ impl App {
         let now = Instant::now();
         if now < self.next_frame {
             std::thread::sleep(self.next_frame - now);
+        } else {
+            self.next_frame = now;
         }
     }
 
@@ -1088,6 +1126,7 @@ impl App {
             Ok(()) | Err(PresentError::OutOfDate) => {}
             Err(error) => {
                 log::error!("presentation failed: {error}");
+                #[cfg(not(target_os = "android"))]
                 event_loop.exit();
             }
         }

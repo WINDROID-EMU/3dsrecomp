@@ -32,6 +32,10 @@ memmap2 = "0.9"
 bytemuck = { version = "1", features = ["derive"] }
 parking_lot = "0.12"
 
+[patch."https://github.com/fearkov/3dsrecomp"]
+recomp3ds = { path = "crates/3dsrecomp" }
+recomp-abi = { path = "crates/3dsrecomp/abi" }
+
 [profile.dev]
 opt-level = 1
 debug = true

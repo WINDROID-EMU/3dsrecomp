@@ -31,6 +31,8 @@ public class ZakuroSettings {
     public boolean touch_controls = true;
     public float touch_controls_opacity = 0.65f;
     public boolean haptic_feedback = true;
+    public String custom_driver = "system";
+    public String custom_driver_name = "Driver do Sistema (Padrão)";
 
     // Preserva seções [keys] e [pad] intactas
     private final List<String> rawKeysLines = new ArrayList<>();
@@ -115,10 +117,23 @@ public class ZakuroSettings {
                     case "haptic_feedback":
                         s.haptic_feedback = Boolean.parseBoolean(val);
                         break;
+                    case "custom_driver":
+                        s.custom_driver = unquote(val);
+                        break;
+                    case "custom_driver_name":
+                        s.custom_driver_name = unquote(val);
+                        break;
                 }
             }
         } catch (Exception e) {
             Log.e(TAG, "Error loading settings.toml", e);
+        }
+        if ("system".equalsIgnoreCase(s.custom_driver)) {
+            File turnip = new File(context.getFilesDir(), "custom_drivers/turnip_default");
+            if (turnip.exists()) {
+                s.custom_driver = "turnip_default";
+                s.custom_driver_name = "Mesa Turnip Adreno";
+            }
         }
         return s;
     }
@@ -142,6 +157,8 @@ public class ZakuroSettings {
             pw.println("touch_controls = " + touch_controls);
             pw.printf(java.util.Locale.US, "touch_controls_opacity = %.2f\n", touch_controls_opacity);
             pw.println("haptic_feedback = " + haptic_feedback);
+            pw.println("custom_driver = \"" + (custom_driver != null ? custom_driver : "system") + "\"");
+            pw.println("custom_driver_name = \"" + (custom_driver_name != null ? custom_driver_name : "Driver do Sistema (Padrão)") + "\"");
             pw.println();
 
             pw.println("[keys]");

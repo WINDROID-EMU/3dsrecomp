@@ -21,13 +21,27 @@ fn try_load_adrenotools() -> Option<ash::Entry> {
     let custom_driver_dir = std::env::var_os("ZAKURO_CUSTOM_DRIVER_DIR")?;
 
     let hook_dir = hook_lib_dir.to_string_lossy().into_owned();
-    let custom_dir = custom_driver_dir.to_string_lossy().into_owned();
+    let mut custom_dir = custom_driver_dir.to_string_lossy().into_owned();
 
-    let driver_filename = "libvulkan_freedreno.so";
+    if custom_dir.is_empty() || custom_dir == "system" {
+        log::info!("Using system Vulkan driver (no custom driver configured)");
+        return None;
+    }
+    if !custom_dir.ends_with('/') {
+        custom_dir.push('/');
+    }
+
+    let driver_filename = std::env::var("ZAKURO_CUSTOM_DRIVER_LIB")
+        .unwrap_or_else(|_| "libvulkan_freedreno.so".to_string());
+    if driver_filename.is_empty() {
+        log::info!("No custom driver library specified, using system driver");
+        return None;
+    }
+
     let driver_path = format!("{custom_dir}{driver_filename}");
 
     if !std::path::Path::new(&driver_path).exists() {
-        log::info!("Turnip driver not found at '{driver_path}', using system driver");
+        log::info!("Custom driver not found at '{driver_path}', using system driver");
         return None;
     }
 

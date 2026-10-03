@@ -1,10 +1,13 @@
 package com.fearkov.zakuro;
 
 import android.app.AlertDialog;
+import android.app.Dialog;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
 import android.content.res.Configuration;
 import android.graphics.PixelFormat;
 import android.os.Build;
@@ -18,6 +21,14 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.view.WindowManager;
+import android.widget.ArrayAdapter;
+import android.widget.Button;
+import android.widget.ImageButton;
+import android.widget.SeekBar;
+import android.widget.Spinner;
+import android.widget.Switch;
+import android.widget.TextView;
+import android.widget.Toast;
 
 /**
  * Atividade de emulação com controles externos em camada XML nativa Android.
@@ -83,8 +94,7 @@ public class NativeActivity extends android.app.NativeActivity {
             updateOverlayVisibility();
             try {
                 if (consumeSettingsRequest() != 0) {
-                    Intent intent = new Intent(NativeActivity.this, SettingsActivity.class);
-                    startActivity(intent);
+                    showInGameSettingsDialog();
                 }
             } catch (Throwable ignored) {}
             stateCheckHandler.postDelayed(this, 150);
@@ -114,14 +124,10 @@ public class NativeActivity extends android.app.NativeActivity {
     protected void onCreate(Bundle savedInstanceState) {
         Log.i(TAG, "NativeActivity onCreate start");
         try {
-            android.system.Os.setenv("ZAKURO_HOOK_LIB_DIR", getApplicationInfo().nativeLibraryDir, true);
-            File driverDir = new File(getFilesDir(), "driver");
-            if (!driverDir.exists()) driverDir.mkdirs();
-            android.system.Os.setenv("ZAKURO_CUSTOM_DRIVER_DIR", driverDir.getAbsolutePath() + "/", true);
-            android.system.Os.setenv("ZAKURO_GPU_SHADERS", "1", true);
-            Log.i(TAG, "AdrenoTools env set: hookLibDir=" + getApplicationInfo().nativeLibraryDir + " driverDir=" + driverDir.getAbsolutePath());
+            ZakuroSettings initSettings = ZakuroSettings.load(this);
+            GpuDriverManager.applyDriverEnv(this, initSettings);
         } catch (Exception e) {
-            Log.w(TAG, "Could not set AdrenoTools env: " + e.getMessage());
+            Log.w(TAG, "Could not set GPU driver env: " + e.getMessage());
         }
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
 
@@ -428,8 +434,7 @@ public class NativeActivity extends android.app.NativeActivity {
                         dialog.dismiss();
                         break;
                     case 1:
-                        Intent settingsIntent = new Intent(this, SettingsActivity.class);
-                        startActivity(settingsIntent);
+                        showInGameSettingsDialog();
                         break;
                     case 2:
                         showOpacityDialog();
@@ -448,6 +453,273 @@ public class NativeActivity extends android.app.NativeActivity {
             .setCancelable(true)
             .setOnDismissListener(d -> applyFullScreenImmersive())
             .show();
+    }
+
+    private static final int REQUEST_PICK_DRIVER = 300;
+    private Runnable onDriverInstalledCallback = null;
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_PICK_DRIVER && resultCode == RESULT_OK && data != null && data.getData() != null) {
+            try {
+                GpuDriverManager.DriverInfo installed = GpuDriverManager.installDriverFromZip(this, data.getData());
+                Toast.makeText(this, "✅ Driver '" + installed.name + "' instalado com sucesso!", Toast.LENGTH_LONG).show();
+                if (onDriverInstalledCallback != null) {
+                    onDriverInstalledCallback.run();
+                }
+            } catch (Exception e) {
+                Toast.makeText(this, "❌ Erro ao instalar driver: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            }
+        }
+    }
+
+    private Dialog settingsDialog = null;
+
+    private void showInGameSettingsDialog() {
+        if (isFinishing() || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1 && isDestroyed())) return;
+        if (settingsDialog != null && settingsDialog.isShowing()) return;
+
+        try {
+            triggerHaptic();
+            View settingsView = getLayoutInflater().inflate(R.layout.activity_settings, null);
+            final ZakuroSettings settings = ZakuroSettings.load(this);
+
+            ImageButton backButton = settingsView.findViewById(R.id.settingsBackButton);
+            Button saveButton = settingsView.findViewById(R.id.settingsSaveButton);
+
+            Spinner spinnerRenderer = settingsView.findViewById(R.id.spinnerRenderer);
+            Spinner spinnerGpuDriver = settingsView.findViewById(R.id.spinnerGpuDriver);
+            Button btnInstallDriver = settingsView.findViewById(R.id.btnInstallDriver);
+            Button btnDeleteDriver = settingsView.findViewById(R.id.btnDeleteDriver);
+            TextView tvDriverInfo = settingsView.findViewById(R.id.tvDriverInfo);
+
+            Switch switchHwRaster = settingsView.findViewById(R.id.switchHwRaster);
+            Spinner spinnerResolution = settingsView.findViewById(R.id.spinnerResolution);
+            Switch switchShowFps = settingsView.findViewById(R.id.switchShowFps);
+            Spinner spinnerLayout = settingsView.findViewById(R.id.spinnerLayout);
+            Switch switchRecompiled = settingsView.findViewById(R.id.switchRecompiled);
+
+            SeekBar seekVolume = settingsView.findViewById(R.id.seekVolume);
+            TextView tvVolumeVal = settingsView.findViewById(R.id.tvVolumeVal);
+            Switch switchMute = settingsView.findViewById(R.id.switchMute);
+
+            Switch switchTouchControls = settingsView.findViewById(R.id.switchTouchControls);
+            SeekBar seekOpacity = settingsView.findViewById(R.id.seekOpacity);
+            TextView tvOpacityVal = settingsView.findViewById(R.id.tvOpacityVal);
+            Switch switchHaptic = settingsView.findViewById(R.id.switchHaptic);
+
+            TextView tvSettingsPath = settingsView.findViewById(R.id.tvSettingsPath);
+
+            // Bind values
+            String[] renderers = {"Vulkan (Padrão e Recomendado no Android)", "OpenGL"};
+            ArrayAdapter<String> rendererAdapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, renderers);
+            spinnerRenderer.setAdapter(rendererAdapter);
+            spinnerRenderer.setSelection("opengl".equalsIgnoreCase(settings.renderer) ? 1 : 0);
+
+            // GPU Driver setup
+            final List<GpuDriverManager.DriverInfo>[] driversRef = new List[]{ GpuDriverManager.getInstalledDrivers(this) };
+            Runnable refreshDrivers = () -> {
+                driversRef[0] = GpuDriverManager.getInstalledDrivers(NativeActivity.this);
+                List<String> names = new ArrayList<>();
+                int sel = 0;
+                for (int i = 0; i < driversRef[0].size(); i++) {
+                    GpuDriverManager.DriverInfo d = driversRef[0].get(i);
+                    names.add(d.name);
+                    if (d.id.equals(settings.custom_driver)) sel = i;
+                }
+                ArrayAdapter<String> adapter = new ArrayAdapter<>(NativeActivity.this, android.R.layout.simple_spinner_dropdown_item, names);
+                spinnerGpuDriver.setAdapter(adapter);
+                spinnerGpuDriver.setSelection(sel);
+            };
+            refreshDrivers.run();
+
+            spinnerGpuDriver.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+                @Override
+                public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
+                    if (position >= 0 && position < driversRef[0].size()) {
+                        GpuDriverManager.DriverInfo d = driversRef[0].get(position);
+                        if (d.isSystem()) {
+                            tvDriverInfo.setText("Driver do Sistema (Qualcomm/Mesa padrão do dispositivo)");
+                            btnDeleteDriver.setVisibility(View.GONE);
+                        } else {
+                            String desc = d.name;
+                            if (!d.description.isEmpty()) desc += "\n" + d.description;
+                            if (!d.author.isEmpty()) desc += " | Autor: " + d.author;
+                            if (!d.libName.isEmpty()) desc += " | Lib: " + d.libName;
+                            tvDriverInfo.setText(desc);
+                            btnDeleteDriver.setVisibility(View.VISIBLE);
+                        }
+                    }
+                }
+                @Override public void onNothingSelected(android.widget.AdapterView<?> parent) {}
+            });
+
+            btnInstallDriver.setOnClickListener(v -> {
+                onDriverInstalledCallback = refreshDrivers;
+                Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                intent.addCategory(Intent.CATEGORY_OPENABLE);
+                intent.setType("*/*");
+                String[] mimeTypes = {"application/zip", "application/x-zip-compressed", "application/octet-stream"};
+                intent.putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes);
+                startActivityForResult(intent, REQUEST_PICK_DRIVER);
+            });
+
+            btnDeleteDriver.setOnClickListener(v -> {
+                int pos = spinnerGpuDriver.getSelectedItemPosition();
+                if (pos >= 0 && pos < driversRef[0].size()) {
+                    GpuDriverManager.DriverInfo d = driversRef[0].get(pos);
+                    if (!d.isSystem()) {
+                        new AlertDialog.Builder(NativeActivity.this)
+                            .setTitle("Excluir Driver")
+                            .setMessage("Deseja realmente remover o driver '" + d.name + "'?")
+                            .setPositiveButton("Excluir", (dlg, w) -> {
+                                if (GpuDriverManager.deleteDriver(NativeActivity.this, d.id)) {
+                                    Toast.makeText(NativeActivity.this, "Driver removido!", Toast.LENGTH_SHORT).show();
+                                    settings.custom_driver = GpuDriverManager.DRIVER_SYSTEM;
+                                    refreshDrivers.run();
+                                }
+                            })
+                            .setNegativeButton("Cancelar", null)
+                            .show();
+                    }
+                }
+            });
+
+            switchHwRaster.setChecked(settings.hardware_rasterizer);
+
+            String[] resolutions = {"1x (240p Original 3DS)", "2x (480p)", "3x (720p HD)", "4x (1080p FHD)"};
+            ArrayAdapter<String> resolutionAdapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, resolutions);
+            spinnerResolution.setAdapter(resolutionAdapter);
+            int resIndex = Math.max(0, Math.min(settings.resolution - 1, resolutions.length - 1));
+            spinnerResolution.setSelection(resIndex);
+
+            switchShowFps.setChecked(settings.show_fps);
+
+            String[] layouts = {"Lado a Lado (Side by Side - Ideal para Celular)", "Superior sobre Inferior (Stacked / Retrato)", "Apenas Tela Superior (Top Screen Only)"};
+            ArrayAdapter<String> layoutAdapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, layouts);
+            spinnerLayout.setAdapter(layoutAdapter);
+            if ("stacked".equalsIgnoreCase(settings.layout)) {
+                spinnerLayout.setSelection(1);
+            } else if ("top_only".equalsIgnoreCase(settings.layout)) {
+                spinnerLayout.setSelection(2);
+            } else {
+                spinnerLayout.setSelection(0);
+            }
+
+            switchRecompiled.setChecked(settings.recompiled);
+
+            int volPercent = (int) Math.round(settings.volume * 100.0);
+            seekVolume.setProgress(volPercent);
+            tvVolumeVal.setText(volPercent + "%");
+            seekVolume.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                @Override public void onProgressChanged(SeekBar sb, int p, boolean f) { tvVolumeVal.setText(p + "%"); }
+                @Override public void onStartTrackingTouch(SeekBar sb) {}
+                @Override public void onStopTrackingTouch(SeekBar sb) {}
+            });
+
+            switchMute.setChecked(settings.mute);
+            switchTouchControls.setChecked(settings.touch_controls);
+
+            int opPercent = (int) Math.round(settings.touch_controls_opacity * 100.0);
+            seekOpacity.setProgress(opPercent);
+            tvOpacityVal.setText(opPercent + "%");
+            seekOpacity.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                @Override public void onProgressChanged(SeekBar sb, int p, boolean f) { tvOpacityVal.setText(p + "%"); }
+                @Override public void onStartTrackingTouch(SeekBar sb) {}
+                @Override public void onStopTrackingTouch(SeekBar sb) {}
+            });
+
+            switchHaptic.setChecked(settings.haptic_feedback);
+            tvSettingsPath.setText("Arquivo: " + ZakuroSettings.getSettingsFile(this).getAbsolutePath());
+
+            final Dialog dialog = new Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen);
+            settingsDialog = dialog;
+            dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+            dialog.setContentView(settingsView);
+
+            if (dialog.getWindow() != null) {
+                dialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+                dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+                dialog.getWindow().setFlags(
+                    WindowManager.LayoutParams.FLAG_FULLSCREEN,
+                    WindowManager.LayoutParams.FLAG_FULLSCREEN
+                );
+            }
+
+            backButton.setOnClickListener(v -> dialog.dismiss());
+
+            saveButton.setOnClickListener(v -> {
+                settings.renderer = (spinnerRenderer.getSelectedItemPosition() == 1) ? "opengl" : "vulkan";
+
+                int driverPos = spinnerGpuDriver.getSelectedItemPosition();
+                if (driverPos >= 0 && driverPos < driversRef[0].size()) {
+                    GpuDriverManager.DriverInfo d = driversRef[0].get(driverPos);
+                    settings.custom_driver = d.id;
+                    settings.custom_driver_name = d.name;
+                } else {
+                    settings.custom_driver = GpuDriverManager.DRIVER_SYSTEM;
+                    settings.custom_driver_name = "Driver do Sistema (Padrão)";
+                }
+                GpuDriverManager.applyDriverEnv(NativeActivity.this, settings);
+
+                settings.hardware_rasterizer = switchHwRaster.isChecked();
+                settings.resolution = spinnerResolution.getSelectedItemPosition() + 1;
+                settings.show_fps = switchShowFps.isChecked();
+
+                int layoutPos = spinnerLayout.getSelectedItemPosition();
+                if (layoutPos == 1) {
+                    settings.layout = "stacked";
+                } else if (layoutPos == 2) {
+                    settings.layout = "top_only";
+                } else {
+                    settings.layout = "side_by_side";
+                }
+
+                settings.recompiled = switchRecompiled.isChecked();
+                settings.volume = seekVolume.getProgress() / 100.0f;
+                settings.mute = switchMute.isChecked();
+
+                settings.touch_controls = switchTouchControls.isChecked();
+                settings.touch_controls_opacity = Math.max(0.05f, seekOpacity.getProgress() / 100.0f);
+                settings.haptic_feedback = switchHaptic.isChecked();
+
+                if (settings.save(NativeActivity.this)) {
+                    Toast.makeText(NativeActivity.this, "✅ Configurações salvas e aplicadas!", Toast.LENGTH_SHORT).show();
+                } else {
+                    Toast.makeText(NativeActivity.this, "⚠️ Erro ao salvar configurações.", Toast.LENGTH_SHORT).show();
+                }
+
+                hapticEnabled = settings.haptic_feedback;
+                if (controllerOverlay != null) {
+                    controllerOverlay.setAlpha(settings.touch_controls_opacity);
+                    if (!settings.touch_controls) {
+                        controllerOverlay.setVisibility(View.GONE);
+                    } else if (checkGameRunning()) {
+                        controllerOverlay.setVisibility(View.VISIBLE);
+                    }
+                }
+
+                try {
+                    reloadSettings();
+                } catch (Throwable ignored) {}
+
+                dialog.dismiss();
+            });
+
+            dialog.setOnDismissListener(d -> {
+                settingsDialog = null;
+                applyFullScreenImmersive();
+                if (getWindow() != null && getWindow().getDecorView() != null) {
+                    getWindow().getDecorView().requestFocus();
+                }
+            });
+
+            dialog.show();
+            applyFullScreenImmersive();
+        } catch (Throwable t) {
+            Log.e(TAG, "showInGameSettingsDialog error", t);
+        }
     }
 
     private boolean hapticEnabled = true;

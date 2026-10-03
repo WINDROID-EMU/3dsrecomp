@@ -1,0 +1,72 @@
+diff -u code032.c.orig code032.c
+--- code032.c (Original f_0031FE84 States 2 & 3)
++++ code032.c (Optimized f_0031FE84 States 2 & 3)
+@@ -1045,41 +1045,26 @@
+ L_0031FEEC:
+     BUDGET(0x0031FEECu, 1);
+     {
+         uint32_t sp = ctx->r[13];
+         ctx->r[13] = sp + 8;
+         ctx->r[4] = mem_read32(ctx, sp);
+         RETURN_TO(mem_read32(ctx, sp + 4));
+     }
+ L_0031FEF0:
+     BUDGET(0x0031FEF0u, 2);
+-    ctx->r[0] = mem_read32(ctx, ctx->r[4]);
+-    ctx->r[14] = 0x0031FEF8u; ctx->r[15] = 0x004558E4u;
+-    CALL(f_004558E4);
+-    RETURNED(0x0031FEF8u);
+-L_0031FEF8:
+-    BUDGET(0x0031FEF8u, 5);
+-    { uint32_t b = 0x00000000u, a = ctx->r[0], r = a - b;
+-      ctx->n = r >> 31; ctx->z = r == 0;
+-      ctx->c = a >= b; ctx->v = ((a ^ b) & (a ^ r)) >> 31; }
+-    if (C_EQ) goto L_0031FEEC;
++    ctx->r[0] = mem_read32(ctx, ctx->r[4]);
++    ctx->r[14] = 0x0031FEF8u; ctx->r[15] = 0x004558E4u;
++    CALL(f_004558E4);
++    RETURNED(0x0031FEF8u);
++L_0031FEF8:
++    BUDGET(0x0031FEF8u, 5);
++    ctx->n = 0; ctx->c = 1; ctx->v = 0;
++    if (ctx->r[0] == 0) {
++        ctx->z = 1;
++        goto L_0031FEEC;
++    }
++    ctx->z = 0;
+     ctx->r[0] = 3;
+     goto L_0031FF24;
+ L_0031FF0C:
+     BUDGET(0x0031FF0Cu, 2);
+-    ctx->r[0] = ctx->r[4];
+-    ctx->r[14] = 0x0031FF14u; ctx->r[15] = 0x00453120u;
+-    CALL(f_00453120);
+-    RETURNED(0x0031FF14u);
+-L_0031FF14:
+-    BUDGET(0x0031FF14u, 4);
+-    { uint32_t b = 0x00000000u, a = ctx->r[0], r = a - b;
+-      ctx->n = r >> 31; ctx->z = r == 0;
+-      ctx->c = a >= b; ctx->v = ((a ^ b) & (a ^ r)) >> 31; }
+-    if (C_EQ) goto L_0031FEEC;
++    ctx->r[0] = ctx->r[4];
++    ctx->r[14] = 0x0031FF14u; ctx->r[15] = 0x00453120u;
++    CALL(f_00453120);
++    RETURNED(0x0031FF14u);
++L_0031FF14:
++    BUDGET(0x0031FF14u, 4);
++    ctx->n = 0; ctx->c = 1; ctx->v = 0;
++    if (ctx->r[0] == 0) {
++        ctx->z = 1;
++        goto L_0031FEEC;
++    }
++    ctx->z = 0;
+     ctx->r[0] = 4;
+ L_0031FF24:
+     BUDGET(0x0031FF24u, 2);
+     mem_write8(ctx, ctx->r[4] + 0x488u, (uint8_t)ctx->r[0]);
+     {
+         uint32_t sp = ctx->r[13];
+         ctx->r[13] = sp + 8;
+         ctx->r[4] = mem_read32(ctx, sp);
+         RETURN_TO(mem_read32(ctx, sp + 4));
+     }

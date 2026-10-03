@@ -75,6 +75,18 @@ impl Backend {
         }
     }
 
+    pub fn update_window(&mut self, window: &Window) -> Result<(), String> {
+        let size = window.inner_size();
+        match self {
+            Backend::Vulkan(presenter) => {
+                presenter
+                    .update_window(window, (size.width.max(1), size.height.max(1)))
+                    .map_err(|e| e.to_string())
+            }
+            Backend::OpenGl { .. } | Backend::None => Ok(()),
+        }
+    }
+
     /// the Vulkan presenter's device, for the renderer to draw on so the
     /// screens are shown straight from it, when the two can share one.
     pub fn shared_device(&self) -> Option<std::sync::Arc<SharedDevice>> {

@@ -1,6 +1,9 @@
 package com.fearkov.zakuro;
 
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.view.View;
 import android.widget.AdapterView;
@@ -13,11 +16,19 @@ import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class SettingsActivity extends Activity {
 
     private ZakuroSettings settings;
 
     private Spinner spinnerRenderer;
+    private Spinner spinnerGpuDriver;
+    private Button btnInstallDriver;
+    private Button btnDeleteDriver;
+    private TextView tvDriverInfo;
+
     private Switch switchHwRaster;
     private Spinner spinnerResolution;
     private Switch switchShowFps;
@@ -35,6 +46,9 @@ public class SettingsActivity extends Activity {
 
     private TextView tvSettingsPath;
 
+    private List<GpuDriverManager.DriverInfo> driverList = new ArrayList<>();
+    private static final int REQUEST_PICK_DRIVER = 200;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -51,6 +65,11 @@ public class SettingsActivity extends Activity {
         Button saveButton = findViewById(R.id.settingsSaveButton);
 
         spinnerRenderer = findViewById(R.id.spinnerRenderer);
+        spinnerGpuDriver = findViewById(R.id.spinnerGpuDriver);
+        btnInstallDriver = findViewById(R.id.btnInstallDriver);
+        btnDeleteDriver = findViewById(R.id.btnDeleteDriver);
+        tvDriverInfo = findViewById(R.id.tvDriverInfo);
+
         switchHwRaster = findViewById(R.id.switchHwRaster);
         spinnerResolution = findViewById(R.id.spinnerResolution);
         switchShowFps = findViewById(R.id.switchShowFps);
@@ -70,6 +89,8 @@ public class SettingsActivity extends Activity {
 
         backButton.setOnClickListener(v -> finish());
         saveButton.setOnClickListener(v -> saveAndFinish());
+        btnInstallDriver.setOnClickListener(v -> pickDriverZip());
+        btnDeleteDriver.setOnClickListener(v -> confirmDeleteDriver());
     }
 
     private void bindData() {
@@ -82,6 +103,9 @@ public class SettingsActivity extends Activity {
         } else {
             spinnerRenderer.setSelection(0);
         }
+
+        // Custom GPU Driver
+        refreshDriversList(settings.custom_driver);
 
         // Hardware Rasterizer
         switchHwRaster.setChecked(settings.hardware_rasterizer);
@@ -148,9 +172,106 @@ public class SettingsActivity extends Activity {
         tvSettingsPath.setText("Arquivo: " + ZakuroSettings.getSettingsFile(this).getAbsolutePath());
     }
 
+    private void refreshDriversList(String selectId) {
+        driverList = GpuDriverManager.getInstalledDrivers(this);
+        List<String> displayNames = new ArrayList<>();
+        int selectedIndex = 0;
+        for (int i = 0; i < driverList.size(); i++) {
+            GpuDriverManager.DriverInfo d = driverList.get(i);
+            displayNames.add(d.name);
+            if (d.id.equals(selectId)) {
+                selectedIndex = i;
+            }
+        }
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, displayNames);
+        spinnerGpuDriver.setAdapter(adapter);
+        spinnerGpuDriver.setSelection(selectedIndex);
+
+        spinnerGpuDriver.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                if (position >= 0 && position < driverList.size()) {
+                    updateDriverDetails(driverList.get(position));
+                }
+            }
+            @Override public void onNothingSelected(AdapterView<?> parent) {}
+        });
+
+        if (selectedIndex >= 0 && selectedIndex < driverList.size()) {
+            updateDriverDetails(driverList.get(selectedIndex));
+        }
+    }
+
+    private void updateDriverDetails(GpuDriverManager.DriverInfo d) {
+        if (d.isSystem()) {
+            tvDriverInfo.setText("Driver do Sistema (Qualcomm/Mesa padrão do dispositivo)");
+            btnDeleteDriver.setVisibility(View.GONE);
+        } else {
+            String desc = d.name;
+            if (!d.description.isEmpty()) desc += "\n" + d.description;
+            if (!d.author.isEmpty()) desc += " | Autor: " + d.author;
+            if (!d.libName.isEmpty()) desc += " | Lib: " + d.libName;
+            tvDriverInfo.setText(desc);
+            btnDeleteDriver.setVisibility(View.VISIBLE);
+        }
+    }
+
+    private void pickDriverZip() {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("*/*");
+        String[] mimeTypes = {"application/zip", "application/x-zip-compressed", "application/octet-stream"};
+        intent.putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes);
+        startActivityForResult(intent, REQUEST_PICK_DRIVER);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_PICK_DRIVER && resultCode == RESULT_OK && data != null && data.getData() != null) {
+            try {
+                GpuDriverManager.DriverInfo installed = GpuDriverManager.installDriverFromZip(this, data.getData());
+                Toast.makeText(this, "✅ Driver '" + installed.name + "' instalado com sucesso!", Toast.LENGTH_LONG).show();
+                refreshDriversList(installed.id);
+            } catch (Exception e) {
+                Toast.makeText(this, "❌ Erro ao instalar driver: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            }
+        }
+    }
+
+    private void confirmDeleteDriver() {
+        int pos = spinnerGpuDriver.getSelectedItemPosition();
+        if (pos < 0 || pos >= driverList.size()) return;
+        GpuDriverManager.DriverInfo current = driverList.get(pos);
+        if (current.isSystem()) return;
+
+        new AlertDialog.Builder(this)
+            .setTitle("Excluir Driver")
+            .setMessage("Deseja realmente remover o driver '" + current.name + "'?")
+            .setPositiveButton("Excluir", (d, w) -> {
+                if (GpuDriverManager.deleteDriver(this, current.id)) {
+                    Toast.makeText(this, "Driver removido!", Toast.LENGTH_SHORT).show();
+                    refreshDriversList(GpuDriverManager.DRIVER_SYSTEM);
+                }
+            })
+            .setNegativeButton("Cancelar", null)
+            .show();
+    }
+
     private void saveAndFinish() {
         // Collect UI data
         settings.renderer = (spinnerRenderer.getSelectedItemPosition() == 1) ? "opengl" : "vulkan";
+
+        int driverPos = spinnerGpuDriver.getSelectedItemPosition();
+        if (driverPos >= 0 && driverPos < driverList.size()) {
+            GpuDriverManager.DriverInfo d = driverList.get(driverPos);
+            settings.custom_driver = d.id;
+            settings.custom_driver_name = d.name;
+        } else {
+            settings.custom_driver = GpuDriverManager.DRIVER_SYSTEM;
+            settings.custom_driver_name = "Driver do Sistema (Padrão)";
+        }
+
         settings.hardware_rasterizer = switchHwRaster.isChecked();
         settings.resolution = spinnerResolution.getSelectedItemPosition() + 1;
         settings.show_fps = switchShowFps.isChecked();
@@ -171,6 +292,8 @@ public class SettingsActivity extends Activity {
         settings.touch_controls = switchTouchControls.isChecked();
         settings.touch_controls_opacity = Math.max(0.1f, seekOpacity.getProgress() / 100.0f);
         settings.haptic_feedback = switchHaptic.isChecked();
+
+        GpuDriverManager.applyDriverEnv(this, settings);
 
         if (settings.save(this)) {
             Toast.makeText(this, "✅ Configurações salvas permanentemente em settings.toml!", Toast.LENGTH_SHORT).show();

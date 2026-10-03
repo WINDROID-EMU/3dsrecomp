@@ -364,6 +364,48 @@ impl VulkanPresenter {
         Ok(presenter)
     }
 
+    pub fn update_window(
+        &mut self,
+        window: &(impl HasDisplayHandle + HasWindowHandle),
+        size: (u32, u32),
+    ) -> Result<(), PresentError> {
+        let _ = unsafe { self.device.device_wait_idle() };
+        self.destroy_swapchain_resources();
+        if self.swapchain != vk::SwapchainKHR::null() {
+            unsafe { self.swapchain_device.destroy_swapchain(self.swapchain, None) };
+            self.swapchain = vk::SwapchainKHR::null();
+        }
+        if self.surface != vk::SurfaceKHR::null() {
+            unsafe { self.surface_instance.destroy_surface(self.surface, None) };
+            self.surface = vk::SurfaceKHR::null();
+        }
+
+        let display = window
+            .display_handle()
+            .map_err(|e| fail(format!("no display handle: {e}")))?;
+        let window_handle = window
+            .window_handle()
+            .map_err(|e| fail(format!("no window handle: {e}")))?;
+
+        let surface = unsafe {
+            ash_window::create_surface(
+                &self._entry,
+                &self.instance,
+                display.as_raw(),
+                window_handle.as_raw(),
+                None,
+            )
+        }
+        .map_err(vk_fail("creating the surface"))?;
+
+        self.surface = surface;
+        self.window = size;
+        self.stale = true;
+        self.build_swapchain()?;
+        log::info!("Vulkan surface and swapchain successfully recreated for new window: {:?}", size);
+        Ok(())
+    }
+
     fn build_swapchain(&mut self) -> Result<(), PresentError> {
         let capabilities = unsafe {
             self.surface_instance
@@ -759,7 +801,7 @@ impl Presenter for VulkanPresenter {
         };
         let (image_index, suboptimal) = match acquired {
             Ok(result) => result,
-            Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
+            Err(vk::Result::ERROR_OUT_OF_DATE_KHR | vk::Result::ERROR_SURFACE_LOST_KHR) => {
                 self.stale = true;
                 self.defer(overlay);
                 return Err(PresentError::OutOfDate);
@@ -829,12 +871,14 @@ impl Presenter for VulkanPresenter {
         self.frame = (self.frame + 1) % FRAMES_IN_FLIGHT;
 
         match result {
-            Ok(false) if !suboptimal => Ok(()),
             Ok(_) => {
-                self.stale = true;
+                #[cfg(not(target_os = "android"))]
+                if suboptimal || result == Ok(true) {
+                    self.stale = true;
+                }
                 Ok(())
             }
-            Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
+            Err(vk::Result::ERROR_OUT_OF_DATE_KHR | vk::Result::ERROR_SURFACE_LOST_KHR) => {
                 self.stale = true;
                 Err(PresentError::OutOfDate)
             }

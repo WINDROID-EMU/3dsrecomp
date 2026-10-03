@@ -176,44 +176,21 @@ public final class MainActivity extends Activity {
     private void setupTurnipDriver() {
         Executors.newSingleThreadExecutor().execute(() -> {
             try {
-                File driverDir = new File(getFilesDir(), "driver");
-                if (!driverDir.exists()) driverDir.mkdirs();
-                File targetSo = new File(driverDir, "libvulkan_freedreno.so");
-
-                try {
-                    android.system.Os.setenv("ZAKURO_HOOK_LIB_DIR", getApplicationInfo().nativeLibraryDir, true);
-                    android.system.Os.setenv("ZAKURO_CUSTOM_DRIVER_DIR", driverDir.getAbsolutePath() + "/", true);
-                    android.util.Log.i("ZakuroDriver", "Driver env set: hookLibDir=" + getApplicationInfo().nativeLibraryDir + " driverDir=" + driverDir.getAbsolutePath());
-                } catch (Exception ignored) {}
-
-                if (!targetSo.exists() || targetSo.length() == 0) {
-                    File[] candidates = new File[] {
-                        new File(Environment.getExternalStorageDirectory(), "Turnip_v26.3.0-R5.zip"),
-                        new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "Turnip_v26.3.0-R5.zip")
-                    };
-                    for (File zipFile : candidates) {
-                        if (zipFile.exists()) {
-                            android.util.Log.i("ZakuroDriver", "Found Turnip zip at " + zipFile.getAbsolutePath() + ", extracting libvulkan_freedreno.so...");
-                            try (java.util.zip.ZipFile zf = new java.util.zip.ZipFile(zipFile)) {
-                                java.util.zip.ZipEntry ze = zf.getEntry("libvulkan_freedreno.so");
-                                if (ze != null) {
-                                    try (InputStream is = zf.getInputStream(ze);
-                                         FileOutputStream fos = new FileOutputStream(targetSo)) {
-                                        byte[] buf = new byte[65536];
-                                        int len;
-                                        while ((len = is.read(buf)) > 0) {
-                                            fos.write(buf, 0, len);
-                                        }
-                                    }
-                                    android.util.Log.i("ZakuroDriver", "Extracted libvulkan_freedreno.so (" + targetSo.length() + " bytes)");
-                                    break;
-                                }
-                            }
-                        }
+                ZakuroSettings settings = ZakuroSettings.load(this);
+                // Migra driver legado e detecta drivers instalados
+                GpuDriverManager.getInstalledDrivers(this);
+                // Se o usuário ainda não escolheu um driver específico e o Turnip integrado existe, define-o como padrão
+                if (settings.custom_driver == null || settings.custom_driver.isEmpty() || "system".equalsIgnoreCase(settings.custom_driver)) {
+                    GpuDriverManager.DriverInfo turnip = GpuDriverManager.getDriverById(this, "turnip_default");
+                    if (turnip != null && turnip.isValid()) {
+                        settings.custom_driver = turnip.id;
+                        settings.custom_driver_name = turnip.name;
+                        settings.save(this);
                     }
                 }
+                GpuDriverManager.applyDriverEnv(this, settings);
             } catch (Exception e) {
-                android.util.Log.w("ZakuroDriver", "Error setting up Turnip driver", e);
+                android.util.Log.w("ZakuroDriver", "Error initializing GPU driver manager", e);
             }
         });
     }
