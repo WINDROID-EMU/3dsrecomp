@@ -42,5 +42,10 @@
             android:exported="false"
             android:label="Mods e Código C (Overrides)"
             android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".SettingsActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize"
+            android:exported="false"
+            android:label="Configurações do Zakuro" />
     </application>
 </manifest>

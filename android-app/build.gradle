@@ -65,11 +65,11 @@ android {
 
 task buildNativeArm64(type: Exec) {
     workingDir '..'
-    commandLine 'cargo', 'ndk', '-t', 'arm64-v8a', '-P', '26', 'build', '-p', 'zakuro', '--no-default-features', '--features', 'android', '--lib'
+    commandLine 'cargo', 'ndk', '-t', 'arm64-v8a', '-P', '26', 'build', '--release', '-p', 'zakuro', '--no-default-features', '--features', 'android', '--lib'
     doLast {
         mkdir 'build/lib/arm64-v8a'
         copy {
-            from '../target/aarch64-linux-android/debug/libzakuro.so'
+            from '../target/aarch64-linux-android/release/libzakuro.so'
             into 'build/lib/arm64-v8a'
             rename 'libzakuro.so', 'libmain.so'
         }

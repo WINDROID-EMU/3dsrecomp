@@ -1124,7 +1124,7 @@ impl Hardware {
                 shades: match (std::env::var_os("ZAKURO_CPU_SHADERS"), std::env::var_os("ZAKURO_GPU_SHADERS")) {
                     (Some(_), _) => false,
                     (None, Some(_)) => true,
-                    (None, None) => properties.device_type != vk::PhysicalDeviceType::INTEGRATED_GPU,
+                    (None, None) => cfg!(target_os = "android") || properties.device_type != vk::PhysicalDeviceType::INTEGRATED_GPU,
                 },
                 // interpreting them all instead, to tell the two apart
                 translates: std::env::var_os("ZAKURO_INTERPRET_SHADERS").is_none(),
@@ -3835,10 +3835,37 @@ fn renders_on(instance: &ash::Instance, device: vk::PhysicalDevice) -> bool {
             instance.enumerate_device_extension_properties(device).unwrap_or_default(),
         )
     };
+    let name = unsafe { std::ffi::CStr::from_ptr(properties.device_name.as_ptr()) }.to_string_lossy();
+    let major = vk::api_version_major(properties.api_version);
+    let minor = vk::api_version_minor(properties.api_version);
+    let patch = vk::api_version_patch(properties.api_version);
     let push = extensions.iter().any(|e| e.extension_name_as_c_str() == Ok(ash::khr::push_descriptor::NAME));
+    let has_d24s8 = depth.optimal_tiling_features.contains(vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT);
+    
+    // Check alternative depth formats
+    let d32s8 = unsafe { instance.get_physical_device_format_properties(device, vk::Format::D32_SFLOAT_S8_UINT) };
+    let has_d32s8 = d32s8.optimal_tiling_features.contains(vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT);
+    let d16s8 = unsafe { instance.get_physical_device_format_properties(device, vk::Format::D16_UNORM_S8_UINT) };
+    let has_d16s8 = d16s8.optimal_tiling_features.contains(vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT);
+
+    // Check dynamic rendering and sync2 extensions
+    let has_dynamic_rendering_ext = extensions.iter().any(|e| e.extension_name_as_c_str() == Ok(ash::khr::dynamic_rendering::NAME));
+    let has_sync2_ext = extensions.iter().any(|e| e.extension_name_as_c_str() == Ok(ash::khr::synchronization2::NAME));
+
+    let has_depth_clamp = features.depth_clamp == vk::TRUE;
+    log::info!("GPU '{name}': Vulkan {major}.{minor}.{patch}, depth_clamp={has_depth_clamp}, D24S8={has_d24s8}, D32S8={has_d32s8}, D16S8={has_d16s8}, push_desc={push}, dyn_render_ext={has_dynamic_rendering_ext}, sync2_ext={has_sync2_ext}");
+
+    let mut ext_names = Vec::new();
+    for ext in &extensions {
+        if let Ok(c_str) = ext.extension_name_as_c_str() {
+            ext_names.push(c_str.to_string_lossy());
+        }
+    }
+    log::info!("Supported GPU extensions ({}/{}): {:?}", ext_names.len(), extensions.len(), ext_names);
+
     properties.api_version >= vk::API_VERSION_1_3
         && features.depth_clamp == vk::TRUE
-        && depth.optimal_tiling_features.contains(vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT)
+        && has_d24s8
         && push
 }
 
@@ -3895,9 +3922,7 @@ pub(crate) fn render_device(
 
 /// a device of the renderer's own, on the GPU pick chooses.
 pub(crate) fn own_device() -> Result<SharedDevice, String> {
-    // SAFETY: loads the system's Vulkan library, which has no other
-    // requirements
-    let entry = unsafe { ash::Entry::load() }.map_err(|e| format!("no Vulkan loader, {e}"))?;
+    let entry = crate::adrenotools::load_entry()?;
     let app = vk::ApplicationInfo::default().application_name(c"zakuro").api_version(vk::API_VERSION_1_3);
     // SAFETY: a plain instance with no layers or extensions
     let instance = unsafe { entry.create_instance(&vk::InstanceCreateInfo::default().application_info(&app), None) }

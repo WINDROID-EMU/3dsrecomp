@@ -4,6 +4,8 @@ pub mod backend;
 pub mod blend;
 #[cfg(feature = "vulkan")]
 mod device;
+#[cfg(feature = "vulkan")]
+pub mod adrenotools;
 pub mod proctex;
 pub mod format;
 pub mod lighting;

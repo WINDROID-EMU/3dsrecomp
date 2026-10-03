@@ -113,9 +113,8 @@ impl VulkanPresenter {
         window: &(impl HasDisplayHandle + HasWindowHandle),
         size: (u32, u32),
     ) -> Result<VulkanPresenter, PresentError> {
-        // SAFETY: the loader reads the system's Vulkan library, which is the
-        // documented way to start.
-        let entry = unsafe { ash::Entry::load() }
+        // Load Vulkan entry via AdrenoTools (or standard system Vulkan)
+        let entry = crate::adrenotools::load_entry()
             .map_err(|e| fail(format!("no Vulkan loader: {e}")))?;
 
         let display = window

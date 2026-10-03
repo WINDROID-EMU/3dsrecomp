@@ -139,7 +139,12 @@ impl Menus {
                 };
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     if ui.button("Settings").clicked() {
-                        self.settings_open = true;
+                        #[cfg(target_os = "android")]
+                        crate::OPEN_SETTINGS_REQUESTED.store(true, std::sync::atomic::Ordering::Relaxed);
+                        #[cfg(not(target_os = "android"))]
+                        {
+                            self.settings_open = true;
+                        }
                     }
                     if ui.add_enabled(settings.games.is_some(), egui::Button::new("Refresh")).clicked() {
                         actions.push(Action::Rescan);
@@ -310,7 +315,12 @@ impl Menus {
                     actions.push(Action::Fullscreen);
                 }
                 if wide(ui, "Settings") {
-                    self.settings_open = true;
+                    #[cfg(target_os = "android")]
+                    crate::OPEN_SETTINGS_REQUESTED.store(true, std::sync::atomic::Ordering::Relaxed);
+                    #[cfg(not(target_os = "android"))]
+                    {
+                        self.settings_open = true;
+                    }
                 }
                 if wide(ui, "Back to the library") {
                     actions.push(Action::Library);

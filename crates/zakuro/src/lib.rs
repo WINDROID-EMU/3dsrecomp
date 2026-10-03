@@ -43,6 +43,8 @@ pub use zakuro_core::recompiled::Linked;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 pub static GAME_RUNNING: AtomicBool = AtomicBool::new(false);
+pub static OPEN_SETTINGS_REQUESTED: AtomicBool = AtomicBool::new(false);
+pub static SETTINGS_RELOAD_REQUESTED: AtomicBool = AtomicBool::new(false);
 
 #[no_mangle]
 pub extern "C" fn Java_com_fearkov_zakuro_NativeActivity_isGameRunning(
@@ -54,6 +56,71 @@ pub extern "C" fn Java_com_fearkov_zakuro_NativeActivity_isGameRunning(
     } else {
         0
     }
+}
+
+#[no_mangle]
+pub extern "C" fn Java_com_fearkov_zakuro_NativeActivity_consumeSettingsRequest(
+    _env: *mut std::ffi::c_void,
+    _class: *mut std::ffi::c_void,
+) -> u8 {
+    if OPEN_SETTINGS_REQUESTED.swap(false, Ordering::Relaxed) {
+        1
+    } else {
+        0
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn Java_com_fearkov_zakuro_NativeActivity_reloadSettings(
+    _env: *mut std::ffi::c_void,
+    _class: *mut std::ffi::c_void,
+) {
+    SETTINGS_RELOAD_REQUESTED.store(true, Ordering::Relaxed);
+}
+
+pub static ANDROID_BUTTONS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+pub static ANDROID_STICK_X: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+pub static ANDROID_STICK_Y: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
+pub static ANDROID_TOUCH_ACTIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+pub static ANDROID_TOUCH_X: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+pub static ANDROID_TOUCH_Y: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+#[no_mangle]
+pub extern "C" fn Java_com_fearkov_zakuro_NativeActivity_nativeSetButtonState(
+    _env: *mut std::ffi::c_void,
+    _class: *mut std::ffi::c_void,
+    button_mask: u32,
+    pressed: u8,
+) {
+    if pressed != 0 {
+        ANDROID_BUTTONS.fetch_or(button_mask, Ordering::Relaxed);
+    } else {
+        ANDROID_BUTTONS.fetch_and(!button_mask, Ordering::Relaxed);
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn Java_com_fearkov_zakuro_NativeActivity_nativeSetCirclePad(
+    _env: *mut std::ffi::c_void,
+    _class: *mut std::ffi::c_void,
+    x: f32,
+    y: f32,
+) {
+    ANDROID_STICK_X.store((x * 1000.0) as i32, Ordering::Relaxed);
+    ANDROID_STICK_Y.store((y * 1000.0) as i32, Ordering::Relaxed);
+}
+
+#[no_mangle]
+pub extern "C" fn Java_com_fearkov_zakuro_NativeActivity_nativeSetTouch(
+    _env: *mut std::ffi::c_void,
+    _class: *mut std::ffi::c_void,
+    active: u8,
+    x: u32,
+    y: u32,
+) {
+    ANDROID_TOUCH_X.store(x, Ordering::Relaxed);
+    ANDROID_TOUCH_Y.store(y, Ordering::Relaxed);
+    ANDROID_TOUCH_ACTIVE.store(active != 0, Ordering::Relaxed);
 }
 
 /// runs the emulator as the command line says, on recompiled code linked
@@ -129,9 +196,9 @@ type PlatformApp = ();
 fn run_with_app(linked: Option<Linked>, _platform_app: Option<PlatformApp>) {
     #[cfg(target_os = "android")]
     if std::env::var_os("RUST_LOG").is_none() {
-        std::env::set_var("RUST_LOG", "debug");
+        std::env::set_var("RUST_LOG", "info");
     }
-    let _ = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("debug")).try_init();
+    let _ = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).try_init();
 
     let options = match cli::parse() {
         Ok(options) => options,
@@ -510,7 +577,13 @@ impl ApplicationHandler for App {
                     }
                 }
             }
-            WindowEvent::RedrawRequested => self.step(event_loop),
+            WindowEvent::RedrawRequested => {
+                if SETTINGS_RELOAD_REQUESTED.swap(false, Ordering::Relaxed) {
+                    self.settings = Settings::load();
+                    self.apply_settings();
+                }
+                self.step(event_loop)
+            }
             _ => {}
         }
     }
@@ -908,7 +981,28 @@ impl App {
     /// runs one frame of the game.
     fn emulate(&mut self) {
         let Some(game) = &mut self.game else { return };
-        let input = self.touch_controls.apply(self.gamepads.apply(self.keyboard.state()));
+        let mut input = self.touch_controls.apply(self.gamepads.apply(self.keyboard.state()));
+
+        #[cfg(target_os = "android")]
+        {
+            let raw_buttons = ANDROID_BUTTONS.load(Ordering::Relaxed);
+            if raw_buttons != 0 {
+                input.buttons |= zakuro_core::services::hid::PadState::from_bits_truncate(raw_buttons);
+            }
+            let sx = ANDROID_STICK_X.load(Ordering::Relaxed);
+            let sy = ANDROID_STICK_Y.load(Ordering::Relaxed);
+            if sx != 0 || sy != 0 {
+                input.circle_x = (sx as f32) / 1000.0;
+                input.circle_y = (sy as f32) / 1000.0;
+            }
+            if ANDROID_TOUCH_ACTIVE.load(Ordering::Relaxed) {
+                input.touch = Some((
+                    ANDROID_TOUCH_X.load(Ordering::Relaxed) as u16,
+                    ANDROID_TOUCH_Y.load(Ordering::Relaxed) as u16,
+                ));
+            }
+        }
+
         if let Some(recorder) = &mut game.recorder {
             recorder.record(input);
         }

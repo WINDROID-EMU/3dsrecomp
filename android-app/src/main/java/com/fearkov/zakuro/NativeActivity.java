@@ -2,6 +2,7 @@ package com.fearkov.zakuro;
 
 import android.app.AlertDialog;
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import java.io.File;
 import android.content.res.Configuration;
@@ -45,6 +46,24 @@ public class NativeActivity extends android.app.NativeActivity {
     private int currentStickKey = 0;
 
     public static native boolean isGameRunning();
+    public static native byte consumeSettingsRequest();
+    public static native void reloadSettings();
+    public static native void nativeSetButtonState(int buttonMask, byte pressed);
+    public static native void nativeSetCirclePad(float x, float y);
+    public static native void nativeSetTouch(byte active, int x, int y);
+
+    public static final int BUTTON_A = 1 << 0;
+    public static final int BUTTON_B = 1 << 1;
+    public static final int BUTTON_SELECT = 1 << 2;
+    public static final int BUTTON_START = 1 << 3;
+    public static final int BUTTON_RIGHT = 1 << 4;
+    public static final int BUTTON_LEFT = 1 << 5;
+    public static final int BUTTON_UP = 1 << 6;
+    public static final int BUTTON_DOWN = 1 << 7;
+    public static final int BUTTON_R = 1 << 8;
+    public static final int BUTTON_L = 1 << 9;
+    public static final int BUTTON_X = 1 << 10;
+    public static final int BUTTON_Y = 1 << 11;
 
     public static boolean checkGameRunning() {
         try {
@@ -62,6 +81,12 @@ public class NativeActivity extends android.app.NativeActivity {
         @Override
         public void run() {
             updateOverlayVisibility();
+            try {
+                if (consumeSettingsRequest() != 0) {
+                    Intent intent = new Intent(NativeActivity.this, SettingsActivity.class);
+                    startActivity(intent);
+                }
+            } catch (Throwable ignored) {}
             stateCheckHandler.postDelayed(this, 150);
         }
     };
@@ -88,6 +113,16 @@ public class NativeActivity extends android.app.NativeActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         Log.i(TAG, "NativeActivity onCreate start");
+        try {
+            android.system.Os.setenv("ZAKURO_HOOK_LIB_DIR", getApplicationInfo().nativeLibraryDir, true);
+            File driverDir = new File(getFilesDir(), "driver");
+            if (!driverDir.exists()) driverDir.mkdirs();
+            android.system.Os.setenv("ZAKURO_CUSTOM_DRIVER_DIR", driverDir.getAbsolutePath() + "/", true);
+            android.system.Os.setenv("ZAKURO_GPU_SHADERS", "1", true);
+            Log.i(TAG, "AdrenoTools env set: hookLibDir=" + getApplicationInfo().nativeLibraryDir + " driverDir=" + driverDir.getAbsolutePath());
+        } catch (Exception e) {
+            Log.w(TAG, "Could not set AdrenoTools env: " + e.getMessage());
+        }
         setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
 
         requestWindowFeature(Window.FEATURE_NO_TITLE);
@@ -152,24 +187,24 @@ public class NativeActivity extends android.app.NativeActivity {
             controllerOverlay = getLayoutInflater().inflate(R.layout.game_controller_overlay, null);
 
             // Mapeamento dos botões de ombro (L e R)
-            bindGamepadButton(R.id.btnL, KeyEvent.KEYCODE_BUTTON_L1, KeyEvent.KEYCODE_Q);
-            bindGamepadButton(R.id.btnR, KeyEvent.KEYCODE_BUTTON_R1, KeyEvent.KEYCODE_W);
+            bindGamepadButton(R.id.btnL, BUTTON_L, KeyEvent.KEYCODE_BUTTON_L1, KeyEvent.KEYCODE_Q);
+            bindGamepadButton(R.id.btnR, BUTTON_R, KeyEvent.KEYCODE_BUTTON_R1, KeyEvent.KEYCODE_W);
 
             // Mapeamento dos botões de ação do 3DS (ABXY)
-            bindGamepadButton(R.id.btnActionA, KeyEvent.KEYCODE_BUTTON_A, KeyEvent.KEYCODE_X);
-            bindGamepadButton(R.id.btnActionB, KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_Z);
-            bindGamepadButton(R.id.btnActionX, KeyEvent.KEYCODE_BUTTON_X, KeyEvent.KEYCODE_S);
-            bindGamepadButton(R.id.btnActionY, KeyEvent.KEYCODE_BUTTON_Y, KeyEvent.KEYCODE_A);
+            bindGamepadButton(R.id.btnActionA, BUTTON_A, KeyEvent.KEYCODE_BUTTON_A, KeyEvent.KEYCODE_X);
+            bindGamepadButton(R.id.btnActionB, BUTTON_B, KeyEvent.KEYCODE_BUTTON_B, KeyEvent.KEYCODE_Z);
+            bindGamepadButton(R.id.btnActionX, BUTTON_X, KeyEvent.KEYCODE_BUTTON_X, KeyEvent.KEYCODE_S);
+            bindGamepadButton(R.id.btnActionY, BUTTON_Y, KeyEvent.KEYCODE_BUTTON_Y, KeyEvent.KEYCODE_A);
 
             // Mapeamento do D-Pad (Direcional em Cruz)
-            bindGamepadButton(R.id.btnDpadUp, KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_UP);
-            bindGamepadButton(R.id.btnDpadDown, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_DOWN);
-            bindGamepadButton(R.id.btnDpadLeft, KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_LEFT);
-            bindGamepadButton(R.id.btnDpadRight, KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_DPAD_RIGHT);
+            bindGamepadButton(R.id.btnDpadUp, BUTTON_UP, KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_UP);
+            bindGamepadButton(R.id.btnDpadDown, BUTTON_DOWN, KeyEvent.KEYCODE_DPAD_DOWN, KeyEvent.KEYCODE_DPAD_DOWN);
+            bindGamepadButton(R.id.btnDpadLeft, BUTTON_LEFT, KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_LEFT);
+            bindGamepadButton(R.id.btnDpadRight, BUTTON_RIGHT, KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_DPAD_RIGHT);
 
             // Mapeamento dos botões de sistema (START e SELECT)
-            bindGamepadButton(R.id.btnStart, KeyEvent.KEYCODE_BUTTON_START, KeyEvent.KEYCODE_ENTER);
-            bindGamepadButton(R.id.btnSelect, KeyEvent.KEYCODE_BUTTON_SELECT, KeyEvent.KEYCODE_DEL);
+            bindGamepadButton(R.id.btnStart, BUTTON_START, KeyEvent.KEYCODE_BUTTON_START, KeyEvent.KEYCODE_ENTER);
+            bindGamepadButton(R.id.btnSelect, BUTTON_SELECT, KeyEvent.KEYCODE_BUTTON_SELECT, KeyEvent.KEYCODE_DEL);
 
             // Menu nativo externo ao compositor gráfico do jogo
             View btnMenu = controllerOverlay.findViewById(R.id.btnMenu);
@@ -183,7 +218,7 @@ public class NativeActivity extends android.app.NativeActivity {
             // Adiciona a camada de controles sobre a janela nativa
             getWindow().getDecorView().post(this::attachOverlay);
 
-            Log.i(TAG, "setupNativeControllerOverlay: successfully initialized!");
+            Log.i(TAG, "setupNativeControllerOverlay: successfully initialized with native JNI input!");
         } catch (Throwable t) {
             Log.e(TAG, "setupNativeControllerOverlay error", t);
         }
@@ -232,7 +267,7 @@ public class NativeActivity extends android.app.NativeActivity {
         }
     }
 
-    private void bindGamepadButton(int buttonId, int gamePadKeyCode, int keyboardKeyCode) {
+    private void bindGamepadButton(int buttonId, int buttonMask, int gamePadKeyCode, int keyboardKeyCode) {
         View btn = controllerOverlay.findViewById(buttonId);
         if (btn == null) return;
 
@@ -241,6 +276,11 @@ public class NativeActivity extends android.app.NativeActivity {
                 case MotionEvent.ACTION_DOWN:
                     v.setPressed(true);
                     triggerHaptic();
+                    try {
+                        nativeSetButtonState(buttonMask, (byte) 1);
+                    } catch (Throwable t) {
+                        Log.w(TAG, "nativeSetButtonState down failed: " + t.getMessage());
+                    }
                     sendKeyEvent(KeyEvent.ACTION_DOWN, gamePadKeyCode);
                     if (keyboardKeyCode != gamePadKeyCode) {
                         sendKeyEvent(KeyEvent.ACTION_DOWN, keyboardKeyCode);
@@ -249,6 +289,11 @@ public class NativeActivity extends android.app.NativeActivity {
                 case MotionEvent.ACTION_UP:
                 case MotionEvent.ACTION_CANCEL:
                     v.setPressed(false);
+                    try {
+                        nativeSetButtonState(buttonMask, (byte) 0);
+                    } catch (Throwable t) {
+                        Log.w(TAG, "nativeSetButtonState up failed: " + t.getMessage());
+                    }
                     sendKeyEvent(KeyEvent.ACTION_UP, gamePadKeyCode);
                     if (keyboardKeyCode != gamePadKeyCode) {
                         sendKeyEvent(KeyEvent.ACTION_UP, keyboardKeyCode);
@@ -287,13 +332,26 @@ public class NativeActivity extends android.app.NativeActivity {
                     thumb.setTranslationX(dx);
                     thumb.setTranslationY(dy);
 
-                    updateStickKeys(dx / maxRadius, dy / maxRadius);
+                    float normX = dx / maxRadius;
+                    float normY = -dy / maxRadius; // Up is positive in 3DS circle pad
+                    try {
+                        nativeSetCirclePad(normX, normY);
+                    } catch (Throwable t) {
+                        Log.w(TAG, "nativeSetCirclePad failed: " + t.getMessage());
+                    }
+
+                    updateStickKeys(normX, -normY);
                     return true;
 
                 case MotionEvent.ACTION_UP:
                 case MotionEvent.ACTION_CANCEL:
                     stickActive = false;
                     thumb.animate().translationX(0).translationY(0).setDuration(80).start();
+                    try {
+                        nativeSetCirclePad(0f, 0f);
+                    } catch (Throwable t) {
+                        Log.w(TAG, "nativeSetCirclePad release failed: " + t.getMessage());
+                    }
                     releaseStickKeys();
                     return true;
             }
@@ -354,7 +412,8 @@ public class NativeActivity extends android.app.NativeActivity {
         triggerHaptic();
         String[] options = {
             "▶  Continuar Jogo",
-            "⚙️  Opacidade dos Controles",
+            "⚙️  Configurações do Emulador",
+            "🎨  Opacidade dos Controles",
             "📳  Alternar Vibração ao Tocar",
             "🔄  Reiniciar Emulação",
             "🚪  Sair para a Biblioteca"
@@ -369,15 +428,19 @@ public class NativeActivity extends android.app.NativeActivity {
                         dialog.dismiss();
                         break;
                     case 1:
-                        showOpacityDialog();
+                        Intent settingsIntent = new Intent(this, SettingsActivity.class);
+                        startActivity(settingsIntent);
                         break;
                     case 2:
-                        toggleHapticFeedback();
+                        showOpacityDialog();
                         break;
                     case 3:
-                        recreate();
+                        toggleHapticFeedback();
                         break;
                     case 4:
+                        recreate();
+                        break;
+                    case 5:
                         finish();
                         break;
                 }
@@ -419,6 +482,9 @@ public class NativeActivity extends android.app.NativeActivity {
             getWindow().getDecorView().post(this::attachOverlay);
         }
         startStateMonitoring();
+        try {
+            reloadSettings();
+        } catch (Throwable ignored) {}
     }
 
     @Override

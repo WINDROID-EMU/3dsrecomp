@@ -3764,6 +3764,7 @@ dependencies = [
  "ash-window",
  "bitflags 2.13.2",
  "glow",
+ "libc",
  "log",
  "naga",
  "raw-window-handle",
