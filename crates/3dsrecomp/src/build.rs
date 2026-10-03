@@ -103,7 +103,7 @@ pub fn generate(
     };
     let folder = if files.is_empty() { dir.clone() } else { dir.join("hand") };
     std::fs::create_dir_all(&folder).map_err(|error| format!("could not create {}, {error}", folder.display()))?;
-    let clean = std::env::var_os("ZAKURO_CLEAN_RECOMPILE").is_some();
+    let clean = std::env::var_os("ZAKURO_CLEAN_RECOMPILE").is_some() || (labels + functions > 0);
     for (name, contents) in &generated {
         let dest = dir.join(name);
         if !clean && dest.exists() && name.starts_with("code") && name.ends_with(".c") {

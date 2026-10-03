@@ -41,6 +41,10 @@ public class NativeActivity extends android.app.NativeActivity {
 
     static {
         try {
+            android.system.Os.setenv("RUST_LOG", "debug", true);
+            android.system.Os.setenv("RUST_BACKTRACE", "1", true);
+        } catch (Throwable ignored) {}
+        try {
             System.loadLibrary("main");
             Log.i(TAG, "libmain.so loaded successfully via System.loadLibrary");
         } catch (Throwable t) {
@@ -194,6 +198,8 @@ public class NativeActivity extends android.app.NativeActivity {
             if (!recompDir.exists()) recompDir.mkdirs();
             android.system.Os.setenv("XDG_CACHE_HOME", cacheDir.getAbsolutePath(), true);
             android.system.Os.setenv("TMPDIR", cacheDir.getAbsolutePath(), true);
+            android.system.Os.setenv("RUST_LOG", "debug", true);
+            android.system.Os.setenv("RUST_BACKTRACE", "1", true);
 
             String romPath = getIntent().getStringExtra("zakuro_selected_rom");
             String action = getIntent().getStringExtra("zakuro_action");

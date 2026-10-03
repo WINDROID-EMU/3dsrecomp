@@ -447,12 +447,12 @@ public final class MainActivity extends Activity {
 
         File actionFile = new File(folder, "action.txt");
         try (FileOutputStream actionOut = new FileOutputStream(actionFile)) {
-            actionOut.write((recompile ? "recompile" : "play").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            actionOut.write((recompile ? "clean_recompile" : "play").getBytes(java.nio.charset.StandardCharsets.UTF_8));
         } catch (Exception ignored) {}
 
         Intent intent = new Intent(this, NativeActivity.class);
         intent.putExtra("zakuro_selected_rom", selectedRom.getAbsolutePath());
-        intent.putExtra("zakuro_action", recompile ? "recompile" : "play");
+        intent.putExtra("zakuro_action", recompile ? "clean_recompile" : "play");
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
         try {
             startActivity(intent);

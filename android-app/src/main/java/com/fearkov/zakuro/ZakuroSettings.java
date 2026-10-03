@@ -128,11 +128,12 @@ public class ZakuroSettings {
         } catch (Exception e) {
             Log.e(TAG, "Error loading settings.toml", e);
         }
-        if ("system".equalsIgnoreCase(s.custom_driver)) {
-            File turnip = new File(context.getFilesDir(), "custom_drivers/turnip_default");
-            if (turnip.exists()) {
-                s.custom_driver = "turnip_default";
-                s.custom_driver_name = "Mesa Turnip Adreno";
+        if ("system".equalsIgnoreCase(s.custom_driver) || s.custom_driver == null || s.custom_driver.isEmpty()) {
+            File baseDir = new File(context.getFilesDir(), "custom_drivers");
+            File[] folders = baseDir.listFiles(File::isDirectory);
+            if (folders != null && folders.length > 0) {
+                s.custom_driver = folders[0].getName();
+                s.custom_driver_name = folders[0].getName();
             }
         }
         return s;
