@@ -78,6 +78,25 @@ pub extern "C" fn Java_com_fearkov_zakuro_NativeActivity_reloadSettings(
     SETTINGS_RELOAD_REQUESTED.store(true, Ordering::Relaxed);
 }
 
+pub static GAME_FPS_BITS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+pub static GAME_SHOWN_FPS_BITS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+#[no_mangle]
+pub extern "C" fn Java_com_fearkov_zakuro_NativeActivity_nativeGetFps(
+    _env: *mut std::ffi::c_void,
+    _class: *mut std::ffi::c_void,
+) -> f32 {
+    f32::from_bits(GAME_FPS_BITS.load(Ordering::Relaxed))
+}
+
+#[no_mangle]
+pub extern "C" fn Java_com_fearkov_zakuro_NativeActivity_nativeGetShownFps(
+    _env: *mut std::ffi::c_void,
+    _class: *mut std::ffi::c_void,
+) -> f32 {
+    f32::from_bits(GAME_SHOWN_FPS_BITS.load(Ordering::Relaxed))
+}
+
 pub static ANDROID_BUTTONS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 pub static ANDROID_STICK_X: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
 pub static ANDROID_STICK_Y: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(0);
@@ -171,13 +190,20 @@ pub fn android_main(app: AndroidApp) {
         let action_file = roms_dir.join("action.txt");
         if let Ok(action) = std::fs::read_to_string(&action_file) {
             let _ = std::fs::remove_file(&action_file);
-            if action.trim() == "recompile" {
+            let action_str = action.trim();
+            if action_str == "recompile" {
                 std::env::set_var("ZAKURO_RECOMPILE_NOW", "1");
+                std::env::remove_var("ZAKURO_CLEAN_RECOMPILE");
+            } else if action_str == "clean_recompile" {
+                std::env::set_var("ZAKURO_RECOMPILE_NOW", "1");
+                std::env::set_var("ZAKURO_CLEAN_RECOMPILE", "1");
             } else {
                 std::env::remove_var("ZAKURO_RECOMPILE_NOW");
+                std::env::remove_var("ZAKURO_CLEAN_RECOMPILE");
             }
         } else {
             std::env::remove_var("ZAKURO_RECOMPILE_NOW");
+            std::env::remove_var("ZAKURO_CLEAN_RECOMPILE");
         }
         if let Some(rom_path) = rom {
             log::info!("Android: auto-selected ROM: {rom_path}");
@@ -434,6 +460,7 @@ impl Running {
         let elapsed = self.counting_since.elapsed();
         if elapsed >= Duration::from_millis(500) {
             self.fps = self.frames as f32 / elapsed.as_secs_f32();
+            GAME_FPS_BITS.store(self.fps.to_bits(), Ordering::Relaxed);
             self.frames = 0;
             self.counting_since = Instant::now();
         }
@@ -990,6 +1017,7 @@ impl App {
 
         if self.last_title_update.elapsed() >= Duration::from_millis(500) {
             let shown = self.shown as f32 / self.last_title_update.elapsed().as_secs_f32();
+            GAME_SHOWN_FPS_BITS.store(shown.to_bits(), Ordering::Relaxed);
             self.shown = 0;
             self.last_title_update = Instant::now();
             if let Some(game) = &self.game {
@@ -1086,9 +1114,8 @@ impl App {
         let overlay = gui.frame(window, |ui| {
             match &game {
                 Some((name, fps, recompiled)) => {
-                    if !cfg!(target_os = "android") {
-                        actions.extend(menus.game(ui, name, show_fps.then_some(*fps), *recompiled, jobs));
-                    }
+                    #[cfg(not(target_os = "android"))]
+                    actions.extend(menus.game(ui, name, show_fps.then_some(*fps), *recompiled, jobs));
                 }
                 None => actions.extend(menus.library(ui, library, settings, jobs)),
             }

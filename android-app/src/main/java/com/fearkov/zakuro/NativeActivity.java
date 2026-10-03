@@ -62,6 +62,10 @@ public class NativeActivity extends android.app.NativeActivity {
     public static native void nativeSetButtonState(int buttonMask, byte pressed);
     public static native void nativeSetCirclePad(float x, float y);
     public static native void nativeSetTouch(byte active, int x, int y);
+    public static native float nativeGetFps();
+    public static native float nativeGetShownFps();
+
+    private TextView tvFpsOverlay;
 
     public static final int BUTTON_A = 1 << 0;
     public static final int BUTTON_B = 1 << 1;
@@ -92,6 +96,7 @@ public class NativeActivity extends android.app.NativeActivity {
         @Override
         public void run() {
             updateOverlayVisibility();
+            updateFpsCounter();
             try {
                 if (consumeSettingsRequest() != 0) {
                     showInGameSettingsDialog();
@@ -108,6 +113,31 @@ public class NativeActivity extends android.app.NativeActivity {
         if (controllerOverlay.getVisibility() != desiredVisibility) {
             controllerOverlay.setVisibility(desiredVisibility);
             Log.i(TAG, "Controller overlay visibility updated: " + (isRunning ? "VISIBLE (Game)" : "GONE (Recompiling / Library)"));
+        }
+    }
+
+    private void updateFpsCounter() {
+        if (tvFpsOverlay == null) return;
+        boolean isRunning = checkGameRunning();
+        ZakuroSettings settings = ZakuroSettings.load(this);
+        if (isRunning && settings.show_fps) {
+            if (tvFpsOverlay.getVisibility() != View.VISIBLE) {
+                tvFpsOverlay.setVisibility(View.VISIBLE);
+            }
+            try {
+                float fps = nativeGetFps();
+                if (fps > 0.0f) {
+                    tvFpsOverlay.setText(String.format(java.util.Locale.US, "%.1f FPS", fps));
+                } else {
+                    tvFpsOverlay.setText("-- FPS");
+                }
+            } catch (Throwable t) {
+                tvFpsOverlay.setText("-- FPS");
+            }
+        } else {
+            if (tvFpsOverlay.getVisibility() != View.GONE) {
+                tvFpsOverlay.setVisibility(View.GONE);
+            }
         }
     }
 
@@ -217,6 +247,8 @@ public class NativeActivity extends android.app.NativeActivity {
             if (btnMenu != null) {
                 btnMenu.setOnClickListener(v -> showInGameMenuDialog());
             }
+
+            tvFpsOverlay = controllerOverlay.findViewById(R.id.tvFpsOverlay);
 
             // Analógico Virtual (Circle Pad)
             setupCirclePad();

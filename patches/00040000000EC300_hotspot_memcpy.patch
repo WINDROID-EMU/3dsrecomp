@@ -1,0 +1,51 @@
+--- /tmp/code001.c	2026-10-03 14:20:08.782827484 -0300
++++ overrides/00040000000EC300/code001.c	2026-10-03 14:33:55.016910319 -0300
+@@ -22655,6 +22655,25 @@
+     return;
+ L_00110D44:
+     BUDGET(0x00110D44u, 6);
++    {
++        uint32_t dst = ctx->r[0];
++        uint32_t src = ctx->r[1];
++        uint32_t len = ctx->r[2];
++        if (len > 0) {
++            uint32_t dst_end = dst + len - 1;
++            uint32_t src_end = src + len - 1;
++            if ((dst >> 12) == (dst_end >> 12) && (src >> 12) == (src_end >> 12)) {
++                uint8_t *p_dst = ctx->write_pages[dst >> 12];
++                uint8_t *p_src = ctx->read_pages[src >> 12];
++                if (LIKELY(p_dst != NULL && p_src != NULL)) {
++                    memmove(p_dst + (dst & 0xFFF), p_src + (src & 0xFFF), len);
++                    RETURN_TO(ctx->r[14]);
++                }
++            }
++        } else {
++            RETURN_TO(ctx->r[14]);
++        }
++    }
+     /* 00110D44 E92D47F0 */
+     { uint32_t base = ctx->r[13], p = base - 32, fin = base - 32;
+     mem_write32(ctx, p, ctx->r[4]); p += 4;
+@@ -22875,6 +22894,22 @@
+     RETURN_TO(ctx->r[14]);
+ L_0011638C:
+     BUDGET(0x0011638Cu, 18);
++    {
++        uint32_t dst = ctx->r[0];
++        uint32_t src = ctx->r[1];
++        uint32_t len = 0x70; // 112 bytes
++        uint32_t dst_end = dst + len - 1;
++        uint32_t src_end = src + len - 1;
++        if ((dst >> 12) == (dst_end >> 12) && (src >> 12) == (src_end >> 12)) {
++            uint8_t *p_dst = ctx->write_pages[dst >> 12];
++            uint8_t *p_src = ctx->read_pages[src >> 12];
++            if (LIKELY(p_dst != NULL && p_src != NULL)) {
++                memmove(p_dst + (dst & 0xFFF), p_src + (src & 0xFFF), len);
++                ctx->r[0] = dst;
++                RETURN_TO(ctx->r[14]);
++            }
++        }
++    }
+     /* 0011638C E1A03001 */
+     {
+     uint32_t m = ctx->r[1];

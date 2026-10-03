@@ -45,6 +45,8 @@ public class CModActivity extends Activity {
     private TextView cmodTitle;
     private TextView cmodGameSub;
     private Button recompileWithModsBtn;
+    private Button recompileCleanBtn;
+    private Button cleanDecompiledCacheBtn;
 
     private Button tabModsBtn;
     private Button tabDecompiledBtn;
@@ -62,6 +64,8 @@ public class CModActivity extends Activity {
     private TextView editorFileName;
     private TextView editorModeBadge;
     private EditText editorContent;
+    private Button editorUnlockBtn;
+    private Button editorExportModBtn;
     private Button editorSaveBtn;
     private Button editorDeleteBtn;
     private Button editorCloseBtn;
@@ -118,6 +122,8 @@ public class CModActivity extends Activity {
         cmodTitle = findViewById(R.id.cmodTitle);
         cmodGameSub = findViewById(R.id.cmodGameSub);
         recompileWithModsBtn = findViewById(R.id.recompileWithModsBtn);
+        recompileCleanBtn = findViewById(R.id.recompileCleanBtn);
+        cleanDecompiledCacheBtn = findViewById(R.id.cleanDecompiledCacheBtn);
 
         tabModsBtn = findViewById(R.id.tabModsBtn);
         tabDecompiledBtn = findViewById(R.id.tabDecompiledBtn);
@@ -137,6 +143,8 @@ public class CModActivity extends Activity {
 
         backButton.setOnClickListener(v -> finish());
         recompileWithModsBtn.setOnClickListener(v -> recompileWithMods());
+        recompileCleanBtn.setOnClickListener(v -> confirmCleanRecompile());
+        cleanDecompiledCacheBtn.setOnClickListener(v -> confirmCleanRecompile());
         newModBtn.setOnClickListener(v -> promptCreateMod(null));
         refreshDecompiledBtn.setOnClickListener(v -> loadDecompiled());
 
@@ -187,6 +195,8 @@ public class CModActivity extends Activity {
         editorFileName = findViewById(R.id.editorFileName);
         editorModeBadge = findViewById(R.id.editorModeBadge);
         editorContent = findViewById(R.id.editorContent);
+        editorUnlockBtn = findViewById(R.id.editorUnlockBtn);
+        editorExportModBtn = findViewById(R.id.editorExportModBtn);
         editorSaveBtn = findViewById(R.id.editorSaveBtn);
         editorDeleteBtn = findViewById(R.id.editorDeleteBtn);
         editorCloseBtn = findViewById(R.id.editorCloseBtn);
@@ -196,6 +206,8 @@ public class CModActivity extends Activity {
             currentEditingFile = null;
         });
 
+        editorUnlockBtn.setOnClickListener(v -> toggleWriteMode());
+        editorExportModBtn.setOnClickListener(v -> promptExportToOverride());
         editorSaveBtn.setOnClickListener(v -> saveCurrentFile());
         editorDeleteBtn.setOnClickListener(v -> confirmDeleteCurrentFile());
 
@@ -208,9 +220,42 @@ public class CModActivity extends Activity {
         findViewById(R.id.snipReg).setOnClickListener(v -> insertSnippet("ctx->r[0]"));
     }
 
+    private void toggleWriteMode() {
+        if (!isReadOnly) {
+            isReadOnly = true;
+            boolean inOverrides = isFromFileInOverrides();
+            editorModeBadge.setText(inOverrides ? "Mod (Leitura)" : "Decompilado (Leitura)");
+            editorModeBadge.setBackgroundResource(R.drawable.badge_background);
+            editorUnlockBtn.setText("🔓 Modo Escrita");
+            editorSaveBtn.setVisibility(View.GONE);
+            editorContent.setFocusable(false);
+            editorContent.setFocusableInTouchMode(false);
+            Toast.makeText(this, "Modo de leitura ativado.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        isReadOnly = false;
+        boolean inOverrides = isFromFileInOverrides();
+        editorModeBadge.setText(inOverrides ? "Mod Editável" : "Cache (Modo Escrita)");
+        editorModeBadge.setBackgroundResource(R.drawable.badge_success);
+        editorUnlockBtn.setText("🔒 Travar Leitura");
+        editorSaveBtn.setVisibility(View.VISIBLE);
+        editorSaveBtn.setText(inOverrides ? "💾 Salvar Mod" : "💾 Salvar no Cache");
+        editorContent.setFocusable(true);
+        editorContent.setFocusableInTouchMode(true);
+        editorContent.requestFocus();
+        Toast.makeText(this, "✏️ Modo Escrita ativado! Você já pode editar o código.", Toast.LENGTH_SHORT).show();
+    }
+
+    private boolean isFromFileInOverrides() {
+        if (currentEditingFile == null || overridesDir == null) return false;
+        File parent = currentEditingFile.getParentFile();
+        return parent != null && parent.getAbsolutePath().equals(overridesDir.getAbsolutePath());
+    }
+
     private void insertSnippet(String snippet) {
         if (isReadOnly) {
-            Toast.makeText(this, "Arquivo em modo somente leitura (descompilado).", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Clique em '🔓 Modo Escrita' para habilitar a edição.", Toast.LENGTH_SHORT).show();
             return;
         }
         int start = Math.max(editorContent.getSelectionStart(), 0);
@@ -259,12 +304,29 @@ public class CModActivity extends Activity {
         isReadOnly = !editable;
 
         editorFileName.setText(file.getName());
-        editorModeBadge.setText(editable ? "Mod Editável" : "Decompilado (Leitura)");
-        editorModeBadge.setBackgroundResource(editable ? R.drawable.badge_success : R.drawable.badge_background);
-        editorSaveBtn.setVisibility(editable ? View.VISIBLE : View.GONE);
-        editorDeleteBtn.setVisibility(editable ? View.VISIBLE : View.GONE);
-        editorContent.setFocusable(editable);
-        editorContent.setFocusableInTouchMode(editable);
+        boolean inOverrides = isFromFileInOverrides();
+
+        if (inOverrides) {
+            editorModeBadge.setText("Mod Editável");
+            editorModeBadge.setBackgroundResource(R.drawable.badge_success);
+            editorUnlockBtn.setVisibility(View.GONE);
+            editorSaveBtn.setVisibility(View.VISIBLE);
+            editorSaveBtn.setText("💾 Salvar Mod");
+            editorDeleteBtn.setVisibility(View.VISIBLE);
+            editorExportModBtn.setVisibility(View.GONE);
+            editorContent.setFocusable(true);
+            editorContent.setFocusableInTouchMode(true);
+        } else {
+            editorModeBadge.setText("Decompilado (Leitura)");
+            editorModeBadge.setBackgroundResource(R.drawable.badge_background);
+            editorUnlockBtn.setVisibility(View.VISIBLE);
+            editorUnlockBtn.setText("🔓 Modo Escrita");
+            editorSaveBtn.setVisibility(View.GONE);
+            editorDeleteBtn.setVisibility(View.GONE);
+            editorExportModBtn.setVisibility(View.VISIBLE);
+            editorContent.setFocusable(false);
+            editorContent.setFocusableInTouchMode(false);
+        }
 
         StringBuilder sb = new StringBuilder();
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8))) {
@@ -273,8 +335,8 @@ public class CModActivity extends Activity {
             while ((line = reader.readLine()) != null) {
                 sb.append(line).append("\n");
                 count++;
-                if (count > 25000) {
-                    sb.append("\n/* [Arquivo muito extenso, exibição truncada aos primeiros 25.000 linhas] */\n");
+                if (count > 200000) {
+                    sb.append("\n/* [Arquivo muito extenso, exibição truncada aos primeiros 200.000 linhas] */\n");
                     break;
                 }
             }
@@ -291,11 +353,69 @@ public class CModActivity extends Activity {
         try (FileOutputStream fos = new FileOutputStream(currentEditingFile)) {
             byte[] bytes = editorContent.getText().toString().getBytes(StandardCharsets.UTF_8);
             fos.write(bytes);
-            Toast.makeText(this, "✅ Mod salvo com sucesso (" + bytes.length + " bytes)!", Toast.LENGTH_SHORT).show();
-            loadMods();
+            if (isFromFileInOverrides()) {
+                Toast.makeText(this, "✅ Mod salvo com sucesso (" + bytes.length + " bytes)!", Toast.LENGTH_SHORT).show();
+                loadMods();
+            } else {
+                Toast.makeText(this, "✅ Alteração salva no Cache (" + bytes.length + " bytes)!", Toast.LENGTH_SHORT).show();
+                loadDecompiled();
+            }
         } catch (Exception e) {
-            Toast.makeText(this, "Erro ao salvar mod: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "Erro ao salvar arquivo: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
+    }
+
+    private void promptExportToOverride() {
+        if (currentEditingFile == null) return;
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("📋 Salvar como Mod / Override");
+        builder.setMessage("Digite o nome para salvar o código na pasta de Overrides permanentes (não será apagado na recompilação):");
+
+        final EditText input = new EditText(this);
+        String baseName = currentEditingFile.getName();
+        if (baseName.startsWith("code")) {
+            baseName = "mod_" + baseName;
+        }
+        input.setText(baseName);
+        input.setSelectAllOnFocus(true);
+
+        FrameLayout container = new FrameLayout(this);
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.leftMargin = 50;
+        params.rightMargin = 50;
+        input.setLayoutParams(params);
+        container.addView(input);
+        builder.setView(container);
+
+        builder.setPositiveButton("Salvar", (dialog, which) -> {
+            String name = input.getText().toString().trim();
+            if (!name.endsWith(".c") && !name.endsWith(".h")) name += ".c";
+            File target = new File(overridesDir, name);
+
+            int start = editorContent.getSelectionStart();
+            int end = editorContent.getSelectionEnd();
+            String contentToSave;
+            if (start >= 0 && end > start) {
+                contentToSave = editorContent.getText().subSequence(start, end).toString();
+                if (!contentToSave.contains("#include")) {
+                    contentToSave = "#include \"recomp.h\"\n\n" + contentToSave;
+                }
+            } else {
+                contentToSave = editorContent.getText().toString();
+            }
+
+            try (FileOutputStream fos = new FileOutputStream(target)) {
+                fos.write(contentToSave.getBytes(StandardCharsets.UTF_8));
+                Toast.makeText(this, "✅ Override salvo em: " + name, Toast.LENGTH_LONG).show();
+                loadMods();
+                openFileInEditor(target, true);
+            } catch (Exception e) {
+                Toast.makeText(this, "Erro ao salvar override: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            }
+        });
+        builder.setNegativeButton(android.R.string.cancel, null);
+        builder.show();
     }
 
     private void confirmDeleteCurrentFile() {
@@ -418,10 +538,10 @@ public class CModActivity extends Activity {
         }
 
         new AlertDialog.Builder(this)
-                .setTitle("Recompilar com Mods")
-                .setMessage("Deseja iniciar a recompilação AOT aplicando os arquivos da pasta de Overrides diretamente na biblioteca nativa (.so)?")
-                .setPositiveButton("Recompilar Agora", (dialog, which) -> {
-                    // Remover o .so antigo para forçar uma nova compilação com os overrides
+                .setTitle("Recompilar AOT")
+                .setMessage("Deseja compilar a biblioteca nativa (.so)?\n\n✅ Suas alterações nos arquivos descompilados e na pasta de Overrides serão mantidas e aplicadas.")
+                .setPositiveButton("Recompilar", (dialog, which) -> {
+                    // Remover o .so antigo para forçar uma nova compilação
                     File soFile = new File(getFilesDir(), "3dsrecomp/" + titleId + ".so");
                     if (soFile.exists()) {
                         soFile.delete();
@@ -438,6 +558,51 @@ public class CModActivity extends Activity {
                     Intent intent = new Intent(this, NativeActivity.class);
                     intent.putExtra("zakuro_selected_rom", romPath);
                     intent.putExtra("zakuro_action", "recompile");
+                    intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                    startActivity(intent);
+                    finish();
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    private void confirmCleanRecompile() {
+        if (romPath == null || romPath.isEmpty()) {
+            Toast.makeText(this, "Nenhuma ROM ativa encontrada para recompilar.", Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        new AlertDialog.Builder(this)
+                .setTitle("🧹 Recompilação Limpa (Do Zero)")
+                .setMessage("Deseja apagar o cache e re-extrair todo o código C original da ROM?\n\n⚠️ Todas as edições diretas feitas nos arquivos descompilados (code*.c) serão descartadas e restauradas para os padrões originais da ROM.\n\n(Seus mods na pasta de Overrides permanecerão seguros).")
+                .setPositiveButton("Resetar e Recompilar", (dialog, which) -> {
+                    // Limpar a pasta de cache descompilado para forçar re-extração do zero
+                    if (cacheDir != null && cacheDir.exists()) {
+                        File[] files = cacheDir.listFiles();
+                        if (files != null) {
+                            for (File f : files) {
+                                f.delete();
+                            }
+                        }
+                    }
+
+                    // Remover o .so antigo
+                    File soFile = new File(getFilesDir(), "3dsrecomp/" + titleId + ".so");
+                    if (soFile.exists()) {
+                        soFile.delete();
+                    }
+
+                    File folder = new File(getFilesDir(), "roms");
+                    if (!folder.exists()) folder.mkdirs();
+
+                    File actionFile = new File(folder, "action.txt");
+                    try (FileOutputStream actionOut = new FileOutputStream(actionFile)) {
+                        actionOut.write("clean_recompile".getBytes(StandardCharsets.UTF_8));
+                    } catch (Exception ignored) {}
+
+                    Intent intent = new Intent(this, NativeActivity.class);
+                    intent.putExtra("zakuro_selected_rom", romPath);
+                    intent.putExtra("zakuro_action", "clean_recompile");
                     intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
                     startActivity(intent);
                     finish();

@@ -49,6 +49,20 @@
         </LinearLayout>
 
         <Button
+            android:id="@+id/recompileCleanBtn"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:layout_marginEnd="6dp"
+            android:backgroundTint="#45475A"
+            android:paddingStart="10dp"
+            android:paddingEnd="10dp"
+            android:text="🧹 Limpar do Zero"
+            android:textAllCaps="false"
+            android:textColor="#F38BA8"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <Button
             android:id="@+id/recompileWithModsBtn"
             android:layout_width="wrap_content"
             android:layout_height="40dp"
@@ -237,6 +251,17 @@
                     android:textStyle="bold" />
 
                 <Button
+                    android:id="@+id/cleanDecompiledCacheBtn"
+                    android:layout_width="wrap_content"
+                    android:layout_height="38dp"
+                    android:layout_marginEnd="6dp"
+                    android:backgroundTint="#FEE2E2"
+                    android:text="🧹 Resetar Cache"
+                    android:textAllCaps="false"
+                    android:textColor="#DC2626"
+                    android:textSize="12sp" />
+
+                <Button
                     android:id="@+id/refreshDecompiledBtn"
                     android:layout_width="wrap_content"
                     android:layout_height="38dp"
@@ -300,6 +325,21 @@
                     android:textColor="#CDD6F4"
                     android:textSize="14sp"
                     android:textStyle="bold" />
+
+                <Button
+                    android:id="@+id/editorUnlockBtn"
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:layout_marginEnd="8dp"
+                    android:backgroundTint="#89B4FA"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:text="🔓 Modo Escrita"
+                    android:textAllCaps="false"
+                    android:textColor="#181825"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
 
                 <TextView
                     android:id="@+id/editorModeBadge"
@@ -443,12 +483,25 @@
                 android:padding="8dp">
 
                 <Button
+                    android:id="@+id/editorExportModBtn"
+                    android:layout_width="wrap_content"
+                    android:layout_height="42dp"
+                    android:layout_marginEnd="8dp"
+                    android:backgroundTint="#A6E3A1"
+                    android:text="📋 Salvar como Override"
+                    android:textAllCaps="false"
+                    android:textColor="#181825"
+                    android:textSize="12sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+
+                <Button
                     android:id="@+id/editorSaveBtn"
                     android:layout_width="0dp"
                     android:layout_height="42dp"
                     android:layout_weight="1"
                     android:backgroundTint="@color/zakuro_blue"
-                    android:text="💾 Salvar Mod"
+                    android:text="💾 Salvar"
                     android:textAllCaps="false"
                     android:textColor="@android:color/white"
                     android:textSize="13sp"
