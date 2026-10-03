@@ -454,12 +454,35 @@ impl VulkanPresenter {
                 .get_physical_device_surface_present_modes(self.physical_device, self.surface)
         }
         .map_err(vk_fail("querying present modes"))?;
-        // FIFO is always available and matches the console's own vsync.
-        let present_mode = if present_modes.contains(&vk::PresentModeKHR::FIFO) {
-            vk::PresentModeKHR::FIFO
-        } else {
-            present_modes[0]
+        let requested_mode = std::env::var("ZAKURO_VULKAN_PRESENT_MODE")
+            .unwrap_or_else(|_| "auto".to_string())
+            .to_lowercase();
+        let present_mode = match requested_mode.as_str() {
+            "mailbox" if present_modes.contains(&vk::PresentModeKHR::MAILBOX) => vk::PresentModeKHR::MAILBOX,
+            "fifo" if present_modes.contains(&vk::PresentModeKHR::FIFO) => vk::PresentModeKHR::FIFO,
+            "fifo_relaxed" if present_modes.contains(&vk::PresentModeKHR::FIFO_RELAXED) => vk::PresentModeKHR::FIFO_RELAXED,
+            "immediate" if present_modes.contains(&vk::PresentModeKHR::IMMEDIATE) => vk::PresentModeKHR::IMMEDIATE,
+            _ => {
+                // Auto / padrão: MAILBOX -> FIFO_RELAXED -> FIFO
+                if present_modes.contains(&vk::PresentModeKHR::MAILBOX) {
+                    vk::PresentModeKHR::MAILBOX
+                } else if present_modes.contains(&vk::PresentModeKHR::FIFO_RELAXED) {
+                    vk::PresentModeKHR::FIFO_RELAXED
+                } else if present_modes.contains(&vk::PresentModeKHR::FIFO) {
+                    vk::PresentModeKHR::FIFO
+                } else {
+                    present_modes[0]
+                }
+            }
         };
+        let mode_name = match present_mode {
+            vk::PresentModeKHR::MAILBOX => "MAILBOX",
+            vk::PresentModeKHR::FIFO => "FIFO",
+            vk::PresentModeKHR::FIFO_RELAXED => "FIFO_RELAXED",
+            vk::PresentModeKHR::IMMEDIATE => "IMMEDIATE",
+            _ => "OTHER",
+        };
+        log::info!("Vulkan swapchain present mode chosen: {} (raw {}) [requested: '{}']", mode_name, present_mode.as_raw(), requested_mode);
 
         let pre_transform = if capabilities.supported_transforms.contains(vk::SurfaceTransformFlagsKHR::IDENTITY) {
             vk::SurfaceTransformFlagsKHR::IDENTITY

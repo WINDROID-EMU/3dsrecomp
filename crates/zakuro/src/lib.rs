@@ -1000,10 +1000,9 @@ impl App {
         }
 
         self.next_frame += FRAME_TIME;
-        // On Android, always present every rendered frame to ensure smooth motion
-        // and prevent the 5 FPS slideshow caused by dropping 4 out of 5 frames.
+        // On Android, allow skipping up to 1 present if behind to prevent VSync stalls from dragging the whole clock down
         #[cfg(target_os = "android")]
-        let should_skip = false;
+        let should_skip = playing && (Instant::now() > self.next_frame) && (self.skipped < 1);
         #[cfg(not(target_os = "android"))]
         let should_skip = playing && (Instant::now() > self.next_frame) && (self.skipped < MAX_SKIPPED);
 
@@ -1021,7 +1020,13 @@ impl App {
             self.shown = 0;
             self.last_title_update = Instant::now();
             if let Some(game) = &self.game {
-                log::info!(target: "zakuro::fps", "{:.1} frames emulated and {shown:.1} shown a second", game.fps);
+                let debug_metrics = std::env::var("ZAKURO_DEBUG_METRICS")
+                    .map_or(false, |v| v == "1" || v.eq_ignore_ascii_case("true"));
+                if debug_metrics {
+                    log::info!(target: "zakuro::fps", "{:.1} frames emulated and {shown:.1} shown a second | {}", game.fps, game.system.status_line());
+                } else {
+                    log::info!(target: "zakuro::fps", "{:.1} frames emulated and {shown:.1} shown a second", game.fps);
+                }
             }
             if let Some(window) = &self.window {
                 let title = match &self.game {

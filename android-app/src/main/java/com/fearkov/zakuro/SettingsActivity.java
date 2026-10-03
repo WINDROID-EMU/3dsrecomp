@@ -32,6 +32,8 @@ public class SettingsActivity extends Activity {
     private Switch switchHwRaster;
     private Spinner spinnerResolution;
     private Switch switchShowFps;
+    private Spinner spinnerVulkanPresentMode;
+    private Switch switchDebugMetrics;
     private Spinner spinnerLayout;
     private Switch switchRecompiled;
 
@@ -73,6 +75,8 @@ public class SettingsActivity extends Activity {
         switchHwRaster = findViewById(R.id.switchHwRaster);
         spinnerResolution = findViewById(R.id.spinnerResolution);
         switchShowFps = findViewById(R.id.switchShowFps);
+        spinnerVulkanPresentMode = findViewById(R.id.spinnerVulkanPresentMode);
+        switchDebugMetrics = findViewById(R.id.switchDebugMetrics);
         spinnerLayout = findViewById(R.id.spinnerLayout);
         switchRecompiled = findViewById(R.id.switchRecompiled);
 
@@ -119,6 +123,31 @@ public class SettingsActivity extends Activity {
 
         // Show FPS
         switchShowFps.setChecked(settings.show_fps);
+
+        // Vulkan Present Mode / VSync
+        String[] presentModes = {
+            "Auto (Recomendado - Mailbox / Sem Bloqueio)",
+            "Mailbox (Triple-Buffering Desbloqueado - Sem VSync)",
+            "FIFO (VSync Ativo / 60Hz Travado)",
+            "FIFO Relaxed (VSync Híbrido com Tearing)",
+            "Immediate (Sem Sincronização / Baixa Latência)"
+        };
+        ArrayAdapter<String> presentAdapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, presentModes);
+        spinnerVulkanPresentMode.setAdapter(presentAdapter);
+        if ("mailbox".equalsIgnoreCase(settings.vulkan_present_mode)) {
+            spinnerVulkanPresentMode.setSelection(1);
+        } else if ("fifo".equalsIgnoreCase(settings.vulkan_present_mode)) {
+            spinnerVulkanPresentMode.setSelection(2);
+        } else if ("fifo_relaxed".equalsIgnoreCase(settings.vulkan_present_mode)) {
+            spinnerVulkanPresentMode.setSelection(3);
+        } else if ("immediate".equalsIgnoreCase(settings.vulkan_present_mode)) {
+            spinnerVulkanPresentMode.setSelection(4);
+        } else {
+            spinnerVulkanPresentMode.setSelection(0);
+        }
+
+        // Debug Metrics
+        switchDebugMetrics.setChecked(settings.debug_metrics);
 
         // Screens Layout
         String[] layouts = {"Lado a Lado (Side by Side - Ideal para Celular)", "Superior sobre Inferior (Stacked / Retrato)", "Apenas Tela Superior (Top Screen Only)"};
@@ -275,6 +304,16 @@ public class SettingsActivity extends Activity {
         settings.hardware_rasterizer = switchHwRaster.isChecked();
         settings.resolution = spinnerResolution.getSelectedItemPosition() + 1;
         settings.show_fps = switchShowFps.isChecked();
+
+        int presentIndex = spinnerVulkanPresentMode.getSelectedItemPosition();
+        switch (presentIndex) {
+            case 1: settings.vulkan_present_mode = "mailbox"; break;
+            case 2: settings.vulkan_present_mode = "fifo"; break;
+            case 3: settings.vulkan_present_mode = "fifo_relaxed"; break;
+            case 4: settings.vulkan_present_mode = "immediate"; break;
+            default: settings.vulkan_present_mode = "auto"; break;
+        }
+        settings.debug_metrics = switchDebugMetrics.isChecked();
 
         int layoutPos = spinnerLayout.getSelectedItemPosition();
         if (layoutPos == 1) {

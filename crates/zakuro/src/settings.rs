@@ -228,6 +228,8 @@ pub struct Settings {
     pub touch_controls: bool,
     /// 0 to 1.
     pub touch_controls_opacity: f32,
+    pub vulkan_present_mode: Option<String>,
+    pub debug_metrics: bool,
 }
 
 impl Default for Settings {
@@ -249,6 +251,8 @@ impl Default for Settings {
             pad: PadButtons::default(),
             touch_controls: cfg!(target_os = "android"),
             touch_controls_opacity: 0.65,
+            vulkan_present_mode: Some("auto".to_string()),
+            debug_metrics: false,
         }
     }
 }

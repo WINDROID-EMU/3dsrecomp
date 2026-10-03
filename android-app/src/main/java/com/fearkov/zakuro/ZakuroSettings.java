@@ -33,6 +33,8 @@ public class ZakuroSettings {
     public boolean haptic_feedback = true;
     public String custom_driver = "system";
     public String custom_driver_name = "Driver do Sistema (Padrão)";
+    public String vulkan_present_mode = "auto"; // "auto", "mailbox", "fifo", "fifo_relaxed", "immediate"
+    public boolean debug_metrics = false;
 
     // Preserva seções [keys] e [pad] intactas
     private final List<String> rawKeysLines = new ArrayList<>();
@@ -123,6 +125,12 @@ public class ZakuroSettings {
                     case "custom_driver_name":
                         s.custom_driver_name = unquote(val);
                         break;
+                    case "vulkan_present_mode":
+                        s.vulkan_present_mode = unquote(val).toLowerCase();
+                        break;
+                    case "debug_metrics":
+                        s.debug_metrics = Boolean.parseBoolean(val);
+                        break;
                 }
             }
         } catch (Exception e) {
@@ -160,6 +168,8 @@ public class ZakuroSettings {
             pw.println("haptic_feedback = " + haptic_feedback);
             pw.println("custom_driver = \"" + (custom_driver != null ? custom_driver : "system") + "\"");
             pw.println("custom_driver_name = \"" + (custom_driver_name != null ? custom_driver_name : "Driver do Sistema (Padrão)") + "\"");
+            pw.println("vulkan_present_mode = \"" + (vulkan_present_mode != null ? vulkan_present_mode : "auto") + "\"");
+            pw.println("debug_metrics = " + debug_metrics);
             pw.println();
 
             pw.println("[keys]");

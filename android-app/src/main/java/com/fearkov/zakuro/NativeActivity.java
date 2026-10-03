@@ -41,7 +41,7 @@ public class NativeActivity extends android.app.NativeActivity {
 
     static {
         try {
-            android.system.Os.setenv("RUST_LOG", "debug", true);
+            android.system.Os.setenv("RUST_LOG", "info,zakuro=debug,zakuro_gpu=info,zakuro_core::services::dsp=warn", true);
             android.system.Os.setenv("RUST_BACKTRACE", "1", true);
         } catch (Throwable ignored) {}
         try {
@@ -160,6 +160,10 @@ public class NativeActivity extends android.app.NativeActivity {
         try {
             ZakuroSettings initSettings = ZakuroSettings.load(this);
             GpuDriverManager.applyDriverEnv(this, initSettings);
+            if (initSettings.vulkan_present_mode != null) {
+                android.system.Os.setenv("ZAKURO_VULKAN_PRESENT_MODE", initSettings.vulkan_present_mode, true);
+            }
+            android.system.Os.setenv("ZAKURO_DEBUG_METRICS", initSettings.debug_metrics ? "1" : "0", true);
         } catch (Exception e) {
             Log.w(TAG, "Could not set GPU driver env: " + e.getMessage());
         }
@@ -198,7 +202,7 @@ public class NativeActivity extends android.app.NativeActivity {
             if (!recompDir.exists()) recompDir.mkdirs();
             android.system.Os.setenv("XDG_CACHE_HOME", cacheDir.getAbsolutePath(), true);
             android.system.Os.setenv("TMPDIR", cacheDir.getAbsolutePath(), true);
-            android.system.Os.setenv("RUST_LOG", "debug", true);
+            android.system.Os.setenv("RUST_LOG", "info,zakuro=debug,zakuro_gpu=info,zakuro_core::services::dsp=warn", true);
             android.system.Os.setenv("RUST_BACKTRACE", "1", true);
 
             String romPath = getIntent().getStringExtra("zakuro_selected_rom");
@@ -535,6 +539,8 @@ public class NativeActivity extends android.app.NativeActivity {
             Switch switchHwRaster = settingsView.findViewById(R.id.switchHwRaster);
             Spinner spinnerResolution = settingsView.findViewById(R.id.spinnerResolution);
             Switch switchShowFps = settingsView.findViewById(R.id.switchShowFps);
+            Spinner spinnerVulkanPresentMode = settingsView.findViewById(R.id.spinnerVulkanPresentMode);
+            Switch switchDebugMetrics = settingsView.findViewById(R.id.switchDebugMetrics);
             Spinner spinnerLayout = settingsView.findViewById(R.id.spinnerLayout);
             Switch switchRecompiled = settingsView.findViewById(R.id.switchRecompiled);
 
@@ -634,6 +640,29 @@ public class NativeActivity extends android.app.NativeActivity {
 
             switchShowFps.setChecked(settings.show_fps);
 
+            String[] presentModes = {
+                "Auto (Recomendado - Mailbox / Sem Bloqueio)",
+                "Mailbox (Triple-Buffering Desbloqueado - Sem VSync)",
+                "FIFO (VSync Ativo / 60Hz Travado)",
+                "FIFO Relaxed (VSync Híbrido com Tearing)",
+                "Immediate (Sem Sincronização / Baixa Latência)"
+            };
+            ArrayAdapter<String> presentAdapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, presentModes);
+            spinnerVulkanPresentMode.setAdapter(presentAdapter);
+            if ("mailbox".equalsIgnoreCase(settings.vulkan_present_mode)) {
+                spinnerVulkanPresentMode.setSelection(1);
+            } else if ("fifo".equalsIgnoreCase(settings.vulkan_present_mode)) {
+                spinnerVulkanPresentMode.setSelection(2);
+            } else if ("fifo_relaxed".equalsIgnoreCase(settings.vulkan_present_mode)) {
+                spinnerVulkanPresentMode.setSelection(3);
+            } else if ("immediate".equalsIgnoreCase(settings.vulkan_present_mode)) {
+                spinnerVulkanPresentMode.setSelection(4);
+            } else {
+                spinnerVulkanPresentMode.setSelection(0);
+            }
+
+            switchDebugMetrics.setChecked(settings.debug_metrics);
+
             String[] layouts = {"Lado a Lado (Side by Side - Ideal para Celular)", "Superior sobre Inferior (Stacked / Retrato)", "Apenas Tela Superior (Top Screen Only)"};
             ArrayAdapter<String> layoutAdapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, layouts);
             spinnerLayout.setAdapter(layoutAdapter);
@@ -704,6 +733,20 @@ public class NativeActivity extends android.app.NativeActivity {
                 settings.hardware_rasterizer = switchHwRaster.isChecked();
                 settings.resolution = spinnerResolution.getSelectedItemPosition() + 1;
                 settings.show_fps = switchShowFps.isChecked();
+
+                int presentIndex = spinnerVulkanPresentMode.getSelectedItemPosition();
+                switch (presentIndex) {
+                    case 1: settings.vulkan_present_mode = "mailbox"; break;
+                    case 2: settings.vulkan_present_mode = "fifo"; break;
+                    case 3: settings.vulkan_present_mode = "fifo_relaxed"; break;
+                    case 4: settings.vulkan_present_mode = "immediate"; break;
+                    default: settings.vulkan_present_mode = "auto"; break;
+                }
+                settings.debug_metrics = switchDebugMetrics.isChecked();
+                try {
+                    android.system.Os.setenv("ZAKURO_VULKAN_PRESENT_MODE", settings.vulkan_present_mode, true);
+                    android.system.Os.setenv("ZAKURO_DEBUG_METRICS", settings.debug_metrics ? "1" : "0", true);
+                } catch (Throwable ignored) {}
 
                 int layoutPos = spinnerLayout.getSelectedItemPosition();
                 if (layoutPos == 1) {
