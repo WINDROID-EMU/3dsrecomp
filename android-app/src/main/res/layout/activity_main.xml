@@ -234,6 +234,18 @@
                     android:textColor="@color/zakuro_blue_dark"
                     android:textSize="14sp"
                     android:textStyle="bold" />
+
+                <Button
+                    android:id="@+id/modsButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="@dimen/button_height"
+                    android:layout_marginTop="8dp"
+                    android:backgroundTint="@color/zakuro_surface_dark"
+                    android:text="🧩 Mods &amp; Código C (Overrides)"
+                    android:textAllCaps="false"
+                    android:textColor="@color/zakuro_blue_dark"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
             </LinearLayout>
 
             <TextView

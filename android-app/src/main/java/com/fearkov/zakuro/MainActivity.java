@@ -42,7 +42,9 @@ public final class MainActivity extends Activity {
     private Button selectRomButton;
     private Button grantPermissionButton;
     private Button debugButton;
+    private Button modsButton;
     private File selectedRom;
+    private RomDiagnosis currentDiag;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -60,12 +62,14 @@ public final class MainActivity extends Activity {
         selectRomButton = findViewById(R.id.selectRomButton);
         grantPermissionButton = findViewById(R.id.grantPermissionButton);
         debugButton = findViewById(R.id.debugButton);
+        modsButton = findViewById(R.id.modsButton);
 
-        selectRomButton.setOnClickListener(v -> chooseRom());
-        grantPermissionButton.setOnClickListener(v -> requestStoragePermission());
-        debugButton.setOnClickListener(v -> showDebugDialog());
-        playButton.setOnClickListener(v -> launchGame(false));
-        startButton.setOnClickListener(v -> launchGame(true));
+        if (selectRomButton != null) selectRomButton.setOnClickListener(v -> chooseRom());
+        if (grantPermissionButton != null) grantPermissionButton.setOnClickListener(v -> requestStoragePermission());
+        if (debugButton != null) debugButton.setOnClickListener(v -> showDebugDialog());
+        if (modsButton != null) modsButton.setOnClickListener(v -> openModsManager());
+        if (playButton != null) playButton.setOnClickListener(v -> launchGame(false));
+        if (startButton != null) startButton.setOnClickListener(v -> launchGame(true));
 
         updatePermissionBanner();
 
@@ -339,6 +343,7 @@ public final class MainActivity extends Activity {
     }
 
     private void applyDiagnosis(RomDiagnosis diag) {
+        currentDiag = diag;
         progress.setProgress(100);
         if (playButton != null) playButton.setEnabled(true);
         if (startButton != null) startButton.setEnabled(true);
@@ -425,6 +430,18 @@ public final class MainActivity extends Activity {
         } catch (RuntimeException error) {
             Toast.makeText(this, R.string.native_start_failed, Toast.LENGTH_LONG).show();
         }
+    }
+
+    private void openModsManager() {
+        Intent intent = new Intent(this, CModActivity.class);
+        if (currentDiag != null && currentDiag.titleId != null && !currentDiag.titleId.isEmpty()) {
+            intent.putExtra(CModActivity.EXTRA_TITLE_ID, currentDiag.titleId);
+            intent.putExtra(CModActivity.EXTRA_GAME_NAME, (currentDiag.title != null && !currentDiag.title.isEmpty()) ? currentDiag.title : "Jogo 3DS");
+        }
+        if (selectedRom != null) {
+            intent.putExtra(CModActivity.EXTRA_ROM_PATH, selectedRom.getAbsolutePath());
+        }
+        startActivity(intent);
     }
 
     private void showDebugDialog() {

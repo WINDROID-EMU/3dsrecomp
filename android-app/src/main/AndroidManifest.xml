@@ -36,5 +36,11 @@
                 android:name="android.app.lib_name"
                 android:value="main" />
         </activity>
+        <activity
+            android:name=".CModActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize"
+            android:exported="false"
+            android:label="Mods e Código C (Overrides)"
+            android:windowSoftInputMode="adjustResize" />
     </application>
 </manifest>

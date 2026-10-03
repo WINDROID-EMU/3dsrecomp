@@ -1,0 +1,470 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/bg_screen"
+    android:orientation="vertical">
+
+    <!-- Top App Bar -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/zakuro_blue_dark"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="12dp">
+
+        <ImageButton
+            android:id="@+id/backButton"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Voltar"
+            android:src="@android:drawable/ic_menu_revert"
+            android:tint="@android:color/white" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/cmodTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🧩 Mods &amp; Código C (Overrides)"
+                android:textColor="@android:color/white"
+                android:textSize="17sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/cmodGameSub"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Title ID: 0004000000000000"
+                android:textColor="#B0C4DE"
+                android:textSize="12sp" />
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/recompileWithModsBtn"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:backgroundTint="@color/zakuro_blue"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:text="⚡ Recompilar"
+            android:textAllCaps="false"
+            android:textColor="@android:color/white"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- Tab Selector -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/zakuro_surface_dark"
+        android:orientation="horizontal"
+        android:padding="6dp">
+
+        <Button
+            android:id="@+id/tabModsBtn"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_weight="1"
+            android:backgroundTint="@color/zakuro_blue"
+            android:text="✍️ Meus Mods / Overrides"
+            android:textAllCaps="false"
+            android:textColor="@android:color/white"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/tabDecompiledBtn"
+            android:layout_width="0dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="6dp"
+            android:layout_weight="1"
+            android:backgroundTint="@color/zakuro_surface"
+            android:text="📂 Código C Decompilado"
+            android:textAllCaps="false"
+            android:textColor="@color/zakuro_blue_dark"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- Content Area -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <!-- Tab 1: User Overrides -->
+        <LinearLayout
+            android:id="@+id/modsContainer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:padding="12dp"
+            android:visibility="visible">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Arquivos de Modificação (.c)"
+                    android:textColor="@color/zakuro_blue_dark"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <Button
+                    android:id="@+id/newModBtn"
+                    android:layout_width="wrap_content"
+                    android:layout_height="38dp"
+                    android:backgroundTint="@color/zakuro_blue"
+                    android:text="➕ Novo Mod"
+                    android:textAllCaps="false"
+                    android:textColor="@android:color/white"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/modsHelpText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="Funções em C com RECOMP_OVERRIDE(0xEndereço) compiladas diretamente na ROM recompilada."
+                android:textColor="@color/zakuro_text_secondary"
+                android:textSize="11sp" />
+
+            <!-- Empty State / Template Suggestions -->
+            <LinearLayout
+                android:id="@+id/emptyModsLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:background="@drawable/card_background"
+                android:orientation="vertical"
+                android:padding="12dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Nenhum mod criado ainda. Comece com um template rápido:"
+                    android:textColor="@color/zakuro_blue_dark"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <Button
+                    android:id="@+id/templateHookBtn"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:backgroundTint="@color/zakuro_surface_dark"
+                    android:gravity="start|center_vertical"
+                    android:text="🪝 Hook de Função (Intercepta e chama original)"
+                    android:textAllCaps="false"
+                    android:textColor="@color/zakuro_blue_dark"
+                    android:textSize="12sp" />
+
+                <Button
+                    android:id="@+id/templateReplaceBtn"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:backgroundTint="@color/zakuro_surface_dark"
+                    android:gravity="start|center_vertical"
+                    android:text="🔄 Substituição Completa (Substitui código nativo)"
+                    android:textAllCaps="false"
+                    android:textColor="@color/zakuro_blue_dark"
+                    android:textSize="12sp" />
+
+                <Button
+                    android:id="@+id/templateCheatBtn"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:backgroundTint="@color/zakuro_surface_dark"
+                    android:gravity="start|center_vertical"
+                    android:text="💎 Patch de Memória / Cheats (mem_write32)"
+                    android:textAllCaps="false"
+                    android:textColor="@color/zakuro_blue_dark"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <ListView
+                android:id="@+id/modsListView"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_marginTop="8dp"
+                android:layout_weight="1"
+                android:divider="@color/zakuro_surface_dark"
+                android:dividerHeight="1dp" />
+        </LinearLayout>
+
+        <!-- Tab 2: Decompiled C Cache -->
+        <LinearLayout
+            android:id="@+id/decompiledContainer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:padding="12dp"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Código C Gerado na Descompilação"
+                    android:textColor="@color/zakuro_blue_dark"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+
+                <Button
+                    android:id="@+id/refreshDecompiledBtn"
+                    android:layout_width="wrap_content"
+                    android:layout_height="38dp"
+                    android:backgroundTint="@color/zakuro_surface_dark"
+                    android:text="🔄 Atualizar"
+                    android:textAllCaps="false"
+                    android:textColor="@color/zakuro_blue_dark"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <EditText
+                android:id="@+id/searchDecompiledEdit"
+                android:layout_width="match_parent"
+                android:layout_height="40dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/card_background"
+                android:hint="🔍 Filtrar arquivo (ex: code000, functions, recomp.h)..."
+                android:inputType="text"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:textColor="@color/zakuro_blue_dark"
+                android:textColorHint="@color/zakuro_text_secondary"
+                android:textSize="13sp" />
+
+            <ListView
+                android:id="@+id/decompiledListView"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_marginTop="8dp"
+                android:layout_weight="1"
+                android:divider="@color/zakuro_surface_dark"
+                android:dividerHeight="1dp" />
+        </LinearLayout>
+
+        <!-- In-App Code Editor / Viewer Overlay -->
+        <LinearLayout
+            android:id="@+id/editorOverlay"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#1E1E2E"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <!-- Editor Header -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="#181825"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:padding="8dp">
+
+                <TextView
+                    android:id="@+id/editorFileName"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:ellipsize="middle"
+                    android:singleLine="true"
+                    android:text="mod_patch.c"
+                    android:textColor="#CDD6F4"
+                    android:textSize="14sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/editorModeBadge"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="8dp"
+                    android:background="@drawable/badge_success"
+                    android:paddingStart="6dp"
+                    android:paddingTop="2dp"
+                    android:paddingEnd="6dp"
+                    android:paddingBottom="2dp"
+                    android:text="Editável"
+                    android:textColor="@color/zakuro_success"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+                <Button
+                    android:id="@+id/editorCloseBtn"
+                    android:layout_width="40dp"
+                    android:layout_height="36dp"
+                    android:background="?android:attr/selectableItemBackgroundBorderless"
+                    android:text="✕"
+                    android:textColor="#F38BA8"
+                    android:textSize="18sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <!-- Quick Snippets Bar (Mobile C Helper) -->
+            <HorizontalScrollView
+                android:id="@+id/editorSnippetsBar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="#313244"
+                android:padding="4dp">
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <Button
+                        android:id="@+id/snipOverride"
+                        android:layout_width="wrap_content"
+                        android:layout_height="32dp"
+                        android:backgroundTint="#45475A"
+                        android:text="RECOMP_OVERRIDE"
+                        android:textAllCaps="false"
+                        android:textColor="#89B4FA"
+                        android:textSize="11sp" />
+
+                    <Button
+                        android:id="@+id/snipOriginal"
+                        android:layout_width="wrap_content"
+                        android:layout_height="32dp"
+                        android:layout_marginStart="4dp"
+                        android:backgroundTint="#45475A"
+                        android:text="RECOMP_ORIGINAL"
+                        android:textAllCaps="false"
+                        android:textColor="#A6E3A1"
+                        android:textSize="11sp" />
+
+                    <Button
+                        android:id="@+id/snipReturn"
+                        android:layout_width="wrap_content"
+                        android:layout_height="32dp"
+                        android:layout_marginStart="4dp"
+                        android:backgroundTint="#45475A"
+                        android:text="RETURN_TO"
+                        android:textAllCaps="false"
+                        android:textColor="#FAB387"
+                        android:textSize="11sp" />
+
+                    <Button
+                        android:id="@+id/snipRead32"
+                        android:layout_width="wrap_content"
+                        android:layout_height="32dp"
+                        android:layout_marginStart="4dp"
+                        android:backgroundTint="#45475A"
+                        android:text="mem_read32"
+                        android:textAllCaps="false"
+                        android:textColor="#F9E2AF"
+                        android:textSize="11sp" />
+
+                    <Button
+                        android:id="@+id/snipWrite32"
+                        android:layout_width="wrap_content"
+                        android:layout_height="32dp"
+                        android:layout_marginStart="4dp"
+                        android:backgroundTint="#45475A"
+                        android:text="mem_write32"
+                        android:textAllCaps="false"
+                        android:textColor="#F38BA8"
+                        android:textSize="11sp" />
+
+                    <Button
+                        android:id="@+id/snipReg"
+                        android:layout_width="wrap_content"
+                        android:layout_height="32dp"
+                        android:layout_marginStart="4dp"
+                        android:backgroundTint="#45475A"
+                        android:text="ctx->r[0]"
+                        android:textAllCaps="false"
+                        android:textColor="#CBA6F7"
+                        android:textSize="11sp" />
+                </LinearLayout>
+            </HorizontalScrollView>
+
+            <!-- Code Text Area -->
+            <ScrollView
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:fillViewport="true">
+
+                <HorizontalScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent">
+
+                    <EditText
+                        android:id="@+id/editorContent"
+                        android:layout_width="wrap_content"
+                        android:layout_height="match_parent"
+                        android:background="@null"
+                        android:fontFamily="monospace"
+                        android:gravity="top|start"
+                        android:inputType="textMultiLine|textNoSuggestions"
+                        android:minWidth="360dp"
+                        android:padding="12dp"
+                        android:textColor="#CDD6F4"
+                        android:textSize="13sp" />
+                </HorizontalScrollView>
+            </ScrollView>
+
+            <!-- Bottom Action Bar -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="#181825"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:padding="8dp">
+
+                <Button
+                    android:id="@+id/editorSaveBtn"
+                    android:layout_width="0dp"
+                    android:layout_height="42dp"
+                    android:layout_weight="1"
+                    android:backgroundTint="@color/zakuro_blue"
+                    android:text="💾 Salvar Mod"
+                    android:textAllCaps="false"
+                    android:textColor="@android:color/white"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <Button
+                    android:id="@+id/editorDeleteBtn"
+                    android:layout_width="wrap_content"
+                    android:layout_height="42dp"
+                    android:layout_marginStart="8dp"
+                    android:backgroundTint="#45475A"
+                    android:text="🗑 Excluir"
+                    android:textAllCaps="false"
+                    android:textColor="#F38BA8"
+                    android:textSize="13sp" />
+            </LinearLayout>
+        </LinearLayout>
+    </FrameLayout>
+</LinearLayout>

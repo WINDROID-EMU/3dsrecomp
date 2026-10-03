@@ -73,7 +73,36 @@ impl Job {
                     state.stage = stage;
                 }
             };
-            let options = build::Options { cancel: Some(&stop), ..build::Options::default() };
+            let base_overrides = std::env::var_os("ZAKURO_DATA_DIR")
+                .or_else(|| std::env::var_os("XDG_DATA_HOME"))
+                .map(std::path::PathBuf::from)
+                .map(|d| d.join("overrides"));
+            let title_overrides = base_overrides.as_ref().map(|d| d.join(format!("{program_id:016X}")));
+
+            let has_c_files = |p: &std::path::Path| {
+                p.is_dir()
+                    && std::fs::read_dir(p)
+                        .map(|mut entries| {
+                            entries.any(|entry| {
+                                entry.map(|e| e.path().extension().is_some_and(|ext| ext == "c")).unwrap_or(false)
+                            })
+                        })
+                        .unwrap_or(false)
+            };
+
+            let overrides_dir = title_overrides
+                .filter(|p| has_c_files(p))
+                .or_else(|| base_overrides.filter(|p| has_c_files(p)));
+
+            if let Some(ref od) = overrides_dir {
+                log::info!("Recompiling with C overrides from: {}", od.display());
+            }
+
+            let options = build::Options {
+                cancel: Some(&stop),
+                overrides: overrides_dir.as_deref(),
+                ..build::Options::default()
+            };
             let result = build::build(&rom, &options, &events);
             if let Ok(mut state) = progress.lock() {
                 state.stage = match result {
