@@ -1,0 +1,16 @@
+Zakuro Android ARM64 source bundle
+
+Branch de origem: android-arm64-port
+
+Conteudo:
+- crates/zakuro: frontend com entrypoint Android e feature android
+- android-app: manifesto NativeActivity, recursos, README e build-apk.sh
+- crates/*: runtime Zakuro completo
+
+Build resumido:
+  export ANDROID_HOME=$HOME/android-sdk
+  export ANDROID_NDK_HOME=$ANDROID_HOME/ndk/30.0.16248370
+  export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$HOME/.cargo/bin:$PATH
+  ./android-app/build-apk.sh
+
+O APK e a chave de debug nao fazem parte deste pacote-fonte.

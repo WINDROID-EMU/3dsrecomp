@@ -1,5 +1,4 @@
-# builds and tests 3dsrecomp on Linux and Windows, with a C compiler around
-# for the header's layout test
+# builds and tests Zakuro on Linux and Windows, and keeps the Windows program
 name: CI
 
 on:
@@ -15,6 +14,15 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
+      - name: Sound library headers
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev pkg-config
       - uses: Swatinem/rust-cache@v2
-      - run: cargo build --release --all-features
-      - run: cargo test --release --all-features
+      - run: cargo build --release --workspace
+      - run: cargo test --release --workspace
+      - name: Keep the Windows program
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v7
+        with:
+          name: zakuro-windows
+          path: target/release/zakuro.exe

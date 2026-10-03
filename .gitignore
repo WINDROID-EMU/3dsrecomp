@@ -1,1 +1,13 @@
 /target
+*.log
+/roms
+/dump
+/user/
+/sysdata/
+.gradle/
+build/
+android-app/build/
+local.properties
+.idea/
+*.iml
+.DS_Store

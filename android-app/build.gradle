@@ -1,0 +1,90 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.fearkov.zakuro'
+    compileSdk 35
+    ndkVersion '27.2.12479018'
+
+    defaultConfig {
+        applicationId 'com.fearkov.zakuro'
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName "0.2.11"
+
+        ndk {
+            abiFilters 'arm64-v8a'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    sourceSets {
+        main {
+            manifest.srcFile 'src/main/AndroidManifest.xml'
+            java.srcDirs = ['src/main/java']
+            res.srcDirs = ['src/main/res']
+            jniLibs.srcDirs = ['build/lib']
+            assets.srcDirs = ['src/main/assets']
+        }
+    }
+
+    signingConfigs {
+        debug {
+            storeFile file("debug.keystore")
+            storePassword "android"
+            keyAlias "androiddebugkey"
+            keyPassword "android"
+        }
+    }
+
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+            debuggable true
+            jniDebuggable true
+        }
+        release {
+            signingConfig signingConfigs.debug
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+}
+
+task buildNativeArm64(type: Exec) {
+    workingDir '..'
+    commandLine 'cargo', 'ndk', '-t', 'arm64-v8a', '-P', '26', 'build', '-p', 'zakuro', '--no-default-features', '--features', 'android', '--lib'
+    doLast {
+        mkdir 'build/lib/arm64-v8a'
+        copy {
+            from '../target/aarch64-linux-android/debug/libzakuro.so'
+            into 'build/lib/arm64-v8a'
+            rename 'libzakuro.so', 'libmain.so'
+        }
+        copy {
+            from 'src/main/jniLibs/arm64-v8a'
+            into 'build/lib/arm64-v8a'
+        }
+    }
+}
+
+tasks.whenTaskAdded { task ->
+    if (task.name.startsWith('merge') && task.name.endsWith('JniLibFolders')) {
+        task.dependsOn buildNativeArm64
+    }
+}
+
+dependencies {
+}

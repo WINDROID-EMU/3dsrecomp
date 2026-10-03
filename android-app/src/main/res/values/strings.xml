@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Zakuro 3DS Recomp</string>
+    <string name="app_subtitle">Recompilador de ROMs Nintendo 3DS</string>
+    <string name="no_rom_selected">Nenhuma ROM selecionada</string>
+    <string name="select_rom">Selecionar ROM (.3DS, .CCI ou .CXI)</string>
+    <string name="recompile_progress">Progresso da recompilação</string>
+    <string name="ready_to_recompile">Pronto para recompilar</string>
+    <string name="start_recompile">Iniciar recompilação</string>
+    <string name="select_rom_first">Selecione uma ROM antes de iniciar.</string>
+    <string name="rom_copying">Preparando a ROM…</string>
+    <string name="rom_ready">ROM preparada. Toque em Iniciar para abrir o emulador.</string>
+    <string name="native_start_failed">Não foi possível iniciar o frontend nativo.</string>
+    <string name="legal_notice">Use somente ROMs próprias e compatíveis com o runtime.</string>
+    <string name="storage_permission_title">Permissão de Armazenamento</string>
+    <string name="storage_permission_msg">O Zakuro necessita de permissão para gerenciar todos os arquivos para acessar as ROMs no dispositivo e gravar os dados da recompilação.</string>
+    <string name="grant_storage_permission">Conceder acesso a arquivos</string>
+    <string name="storage_permission_granted">Acesso a todos os arquivos concedido!</string>
+    <string name="storage_permission_denied_warning">Permissão para gerenciar arquivos não concedida. O acesso a ROMs pode falhar.</string>
+    <string name="view_debug_logs">Diagnóstico &amp; Logs do Sistema</string>
+    <string name="rom_diagnosis_title">Diagnóstico da ROM &amp; Recompilação</string>
+    <string name="play_game">▶ Jogar (Modo Interpretador)</string>
+    <string name="recompile_game">⚡ Recompilar (3dsrecomp AOT)</string>
+    <string name="status_decrypted">Descriptografada</string>
+    <string name="status_encrypted">Criptografada</string>
+    <string name="compiler_status_title">Status do Compilador NDK / C</string>
+    <string name="compiler_status_desc">A recompilação traduz o código ARM do 3DS para C e gera uma biblioteca nativa .so.</string>
+</resources>

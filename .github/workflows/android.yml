@@ -1,0 +1,73 @@
+name: Android Build & Release
+
+on:
+  push:
+    branches: [ "main" ]
+    tags: [ "v*" ]
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Publish as GitHub Release'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Set up Android NDK
+        run: |
+          echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "ndk;27.2.12479018"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk
+
+      - name: Build Android Release APK
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :android-app:assembleRelease --stacktrace
+
+      - name: Prepare APK Asset
+        run: |
+          cp android-app/build/outputs/apk/release/android-app-release.apk zakuro-3ds-recomp-arm64-v8a.apk
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zakuro-3ds-recomp-arm64-v8a
+          path: zakuro-3ds-recomp-arm64-v8a.apk
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.create_release)
+        uses: softprops/action-gh-release@v2
+        with:
+          files: zakuro-3ds-recomp-arm64-v8a.apk
+          name: ${{ startsWith(github.ref, 'refs/tags/v') && format('Zakuro 3DS Recomp {0}', github.ref_name) || 'Zakuro 3DS Recomp Android' }}
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('v0.2.11-{0}', github.run_number) }}
+          body: |
+            ## Zakuro 3DS Recomp for Android (ARM64)
+            - Suporte nativo completo para Android (arm64-v8a).
+            - Recompilador AOT on-device integrado (TinyCC / Mold / Clang).
+            - Controles virtuais na tela em XML nativo (Circle Pad, D-pad, ABXY, L/R, Start, Select, Menu).
+            - Controles inteligentes: exibidos exclusivamente dentro do jogo, ocultos durante a recompilação e na biblioteca.
+            - Renderizador Vulkan landscape em resolução nativa a 60 FPS.
+          draft: false
+          prerelease: false

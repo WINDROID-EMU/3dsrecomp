@@ -1,0 +1,21 @@
+[package]
+name = "zakuro-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+symphonia-codec-aac = "0.6"
+symphonia-core = "0.6"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+zakuro-common.workspace = true
+zakuro-cpu.workspace = true
+zakuro-fs.workspace = true
+zakuro-gpu = { workspace = true, features = ["vulkan"] }
+log.workspace = true
+thiserror.workspace = true
+bitflags.workspace = true
+recomp-abi.workspace = true
+
+[dev-dependencies]
+env_logger = "0.11"

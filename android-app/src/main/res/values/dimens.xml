@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="screen_padding">24dp</dimen>
+    <dimen name="content_max_width">720dp</dimen>
+    <dimen name="logo_size">144dp</dimen>
+    <dimen name="section_spacing">20dp</dimen>
+    <dimen name="button_height">52dp</dimen>
+</resources>

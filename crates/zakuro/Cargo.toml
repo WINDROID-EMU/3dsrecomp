@@ -1,0 +1,40 @@
+[package]
+name = "zakuro"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "A high-level-emulation Nintendo 3DS emulator"
+
+[lib]
+path = "src/lib.rs"
+crate-type = ["rlib", "cdylib"]
+
+[[bin]]
+name = "zakuro"
+path = "src/main.rs"
+
+[features]
+default = ["desktop"]
+desktop = ["dep:rfd"]
+android = ["winit/android-native-activity"]
+
+[dependencies]
+zakuro-common.workspace = true
+zakuro-core.workspace = true
+zakuro-fs.workspace = true
+zakuro-gpu = { workspace = true, features = ["opengl", "vulkan"] }
+log.workspace = true
+env_logger = "0.11"
+winit = { version = "0.30", features = ["serde"] }
+raw-window-handle = "0.6"
+glutin = "0.32"
+glutin-winit = "0.5"
+cpal = "0.16"
+egui = { version = "0.36", default-features = false, features = ["default_fonts"] }
+egui-winit = { version = "0.36", default-features = false, features = ["clipboard", "wayland", "x11"] }
+serde = { version = "1.0.229", features = ["derive"] }
+toml = "1.1.6"
+rfd = { version = "0.17.2", optional = true, default-features = false, features = ["xdg-portal"] }
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp", "bmp"] }
+recomp3ds = { git = "https://github.com/fearkov/3dsrecomp" }
+gilrs = { version = "0.11.2", features = ["serde-serialize"] }

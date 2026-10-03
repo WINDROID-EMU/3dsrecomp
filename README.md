@@ -1,65 +1,62 @@
-# 3dsrecomp
+# Zakuro
 
-This is a static recompiler for Nintendo 3DS games, made to run with [Zakuro](https://github.com/fearkov/zakuro). It's a WIP.
+A WIP HLE Nintendo 3DS emulator written in Rust that uses ahead-of-time (AOT) recompilation instead of a JIT.
 
 Bug reports, progress and everything else are on the [Discord server](https://discord.gg/7dduXVv2xm).
 
-It reads a game's code, finds the functions in it and turns them into C, which compiles into a library the emulator loads. Anything it can't handle or didn't find still runs in Zakuro's interpreter, so a game doesn't have to be fully recompiled to work.
+The games tested so far are in [COMPATIBILITY.md](COMPATIBILITY.md).
 
-It's what Zakuro uses instead of a JIT. So far it has been tested with Pokémon Alpha Sapphire, Pokémon Y, The Legend of Zelda: Majora's Mask 3D and Persona Q, with about 99.8% of the instructions they run coming from the library (Pokémon Y interprets 0.21% of them, Persona Q 0.26%).
+<p>
+  <img width="266" alt="Pokémon Y running in Zakuro" src="docs/screenshots/pokemon-y.png" />
+  <img width="266" alt="The Legend of Zelda: Majora's Mask 3D running in Zakuro" src="docs/screenshots/majoras-mask-3d.png" />
+  <img width="266" alt="Persona Q running in Zakuro" src="docs/screenshots/persona-q.png" />
+</p>
 
-## Features
 
-- finding the code in the main executable and in the CRO modules, from the entry point, calls, exports, relocations, pointers in data and what the modules import from each other, then looking for where functions begin in whatever is left
-- generating C for ARM, Thumb and VFP code, with the less common instructions going through the interpreter
-- modules get code that works wherever the game loads them
-- checking every recompiled function against Zakuro's interpreter, running both from the same state and comparing registers, flags and memory
-- running it in Zakuro, which finds the library build installs on its own, and writes down where it still had to interpret, which the next build takes in
-- replacing any function with one written by hand in C, for fixes, mods or faster versions, see [docs/overrides.md](docs/overrides.md)
-- making a game into a program of its own, with the code linked into Zakuro instead of loaded by it, see [docs/port.md](docs/port.md)
+I started developing this project in October 2025, before
+[feargba](https://github.com/fearkov/feargba). 
 
-## How to use
+I first wrote it in C++, but I was learning Rust at the time and noticed there wasn't a working 3DS emulator written in Rust, so I switched.
 
-You need Rust and a C compiler. It works on Linux and Windows, where gcc from MinGW-w64 (through MSYS2 or WinLibs) works.
+This is a personal experimental project. You can use it to play games, but that was never the main goal. Some games boot. Instead of translating code while the game runs, like a JIT does, Zakuro runs code recompiled ahead of time by [3dsrecomp](https://github.com/fearkov/3dsrecomp), and tested games run at full speed that way. On the interpreter alone they run below full speed.
 
-```
-cargo build --release
-./target/release/3dsrecomp analyze game.3ds
-./target/release/3dsrecomp build game.3ds
-```
+Builds for Windows and Linux are on the [releases page](https://github.com/fearkov/zakuro/releases): on Windows, unzip it and run zakuro.exe, and on Linux, extract it and run ./zakuro.
 
-analyze - shows how much of the code was found; 
-build - writes the C, compiles it and installs the library where Zakuro finds it. Give it a folder (build game.3ds out) to keep everything there instead. 
+To build it yourself you need Rust 1.95 or newer. On Linux, building also needs pkg-config and the ALSA and udev development files (libasound2-dev and libudev-dev on Debian and Ubuntu, alsa-lib and systemd-libs on Arch). On Windows, nothing else is needed:
 
-verify runs the recompiled functions against Zakuro's interpreter, which cargo fetches when it's built with the verify feature:
+    cargo install --git https://github.com/fearkov/zakuro --locked zakuro
 
-```
-cargo build --release --features verify
-./target/release/3dsrecomp verify game.3ds ~/.local/share/3dsrecomp/<title id>.so
-```
+Cargo puts it in ~/.cargo/bin, which has to be on your PATH. Then `zakuro` in a terminal opens it. To play you need a decrypted ROM:
 
-The build takes a while, so don't worry. After that, Zakuro runs the game on the recompiled code on its own:
+    zakuro path/to/rom.3ds
 
-```
-zakuro game.3ds
-```
+Without a ROM it opens a library with the games in a folder you pick, where you can also recompile them. Esc brings up a menu over the game, and the settings (controls, sound, graphics, a background for the library) are in there too.
 
-Or make the game a program of its own, which still needs the game to run:
+Games run faster with their code recompiled ahead of time by [3dsrecomp](https://github.com/fearkov/3dsrecomp), which comes with Zakuro: press Recompile next to a game in the library, once per game. It takes around ten minutes and needs a C compiler, such as gcc or clang. On Windows, gcc from MinGW-w64 (through MSYS2 or WinLibs) works out of the box. From then on Zakuro runs the recompiled code on its own, and anything it doesn't cover still goes through the interpreter.
 
-```
-./target/release/3dsrecomp port game.3ds mygame
-cd mygame && cargo build --release
-./target/release/<name> game.3ds
-```
+3dsrecomp also works on its own, from the terminal:
 
-build and port both take --overrides with a C file or a folder of them, for functions written by hand.
+    cargo install --git https://github.com/fearkov/3dsrecomp --locked recomp3ds
+    3dsrecomp build path/to/rom.3ds
 
-## Notes
+--recompiled points it at another library, and --interpreter runs everything in the interpreter.
 
-This repository doesn't contain any game code. You need your own dump of a game you own, and since the generated C, libraries and programs come from the game, don't share them.
+No copyrighted data is included. I do not condone piracy, and I will not help you with that. So, don't ask me about that.
 
-I do not condone piracy, and I will not help you with that. So, don't ask me about that.
+Controls:
+
+| 3DS | Keyboard | Controller |
+|---|---|---|
+| A / B / X / Y | X / Z / S / A | Right / bottom / top / left face buttons |
+| L / R | Q / W | LB / RB (L1 / R1) |
+| Start / Select | Enter / Backspace | Start / Back (Select) |
+| D-pad | Arrow keys | D-pad |
+| Circle pad | I / J / K / L | Left stick |
+| Touch screen | Mouse (click) | |
+| Menu / Pause / Fullscreen | Esc / F1 / F11 | Home |
+
+Keys and controller buttons can be changed in the settings. Xbox, PlayStation, Switch Pro and most other controllers work.
 
 Contributions are welcome. Using AI is fine sometimes, but the code must always be reviewed by a human. Code that is entirely vibecoded will be discarded.
 
-
+MIT license.
